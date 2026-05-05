@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  BOSS
+  FOREMAN
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum WorkerRole {
+  WORKER
+  FOREMAN
+}
+
+enum ExpenseCategory {
+  MATERIALS
+  SALARIES
+  INSURANCE
+  OTHER
+}
+
+/// Платформа: фирма-клиент; шефът и прорабите са вързани към нея.
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  projects      Project[]
+  inventoryItems InventoryItem[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole
+  companyId    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company          Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedProjects ProjectForeman[]
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  companyId      String
+  name           String
+  location       String
+  totalPrice     Decimal       @db.Decimal(14, 2)
+  advancePayment Boolean       @default(false)
+  advanceAmount  Decimal?      @db.Decimal(14, 2)
+  status         ProjectStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  foremen          ProjectForeman[]
+  workerGroups     WorkerGroup[]
+  expenses         Expense[]
+  payments         Payment[]
+  dailyWorkEntries DailyWorkEntry[]
+  materialMoves    MaterialMovement[]
+}
+
+model ProjectForeman {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model WorkerGroup {
+  id        String   @id @default(cuid())
+  name      String
+  projectId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workers Worker[]
+}
+
+model Worker {
+  id        String     @id @default(cuid())
+  name      String
+  role      WorkerRole @default(WORKER)
+  groupId   String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  group       WorkerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  attendances Attendance[]
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  workerId  String
+  date      DateTime @db.Date
+  present   Boolean  @default(true)
+  hours     Decimal? @db.Decimal(6, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, date])
+}
+
+model DailyWorkEntry {
+  id             String   @id @default(cuid())
+  projectId      String
+  date           DateTime @db.Date
+  tasksPlanned   String   @default("")
+  tasksCompleted String   @default("")
+  notes          String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, date])
+}
+
+model InventoryItem {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  quantity     Decimal  @db.Decimal(14, 3)
+  unit         String
+  unitCostEur  Decimal? @db.Decimal(14, 4)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  movements MaterialMovement[]
+}
+
+model MaterialMovement {
+  id              String   @id @default(cuid())
+  inventoryItemId String
+  projectId       String?
+  quantity        Decimal  @db.Decimal(14, 3)
+  note            String?
+  createdAt       DateTime @default(now())
+
+  item    InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  project Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  amount      Decimal         @db.Decimal(14, 2)
+  date        DateTime        @db.Date
+  category    ExpenseCategory
+  projectId   String?
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  projectId   String
+  amount      Decimal  @db.Decimal(14, 2)
+  date        DateTime @db.Date
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model MonthlyReport {
+  id            String   @id @default(cuid())
+  year          Int
+  month         Int
+  totalExpenses Decimal  @db.Decimal(14, 2)
+  totalRevenue  Decimal  @db.Decimal(14, 2)
+  profit        Decimal  @db.Decimal(14, 2)
+  generatedAt   DateTime @default(now())
+
+  @@unique([year, month])
+}

@@ -1,0 +1,101 @@
+### Variables — set for your deployment
+@base = http://localhost:3000
+@token = paste-jwt-or-use-cookie-from-browser
+
+### Boss creates foreman / brigadir (session cookie from browser login)
+POST {{base}}/api/users/foreman
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Site Foreman",
+  "email": "foreman@company.com",
+  "password": "secret12"
+}
+
+### Login (sets HttpOnly cookie on same origin)
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "boss@demo.local",
+  "password": "demo1234"
+}
+
+### Current user
+GET {{base}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### Projects (boss: full finances; foreman: assigned only, no prices)
+GET {{base}}/api/projects
+Authorization: Bearer {{token}}
+
+### Create project (boss)
+POST {{base}}/api/projects
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Warehouse renovation",
+  "location": "Industrial zone",
+  "totalPrice": 48000,
+  "advancePayment": true,
+  "advanceAmount": 10000,
+  "status": "ACTIVE"
+}
+
+### Attendance upsert
+POST {{base}}/api/attendance
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "workerId": "WORKER_ID",
+  "date": "2026-05-03",
+  "present": true,
+  "hours": 8
+}
+
+### Move inventory to project (deducts stock)
+POST {{base}}/api/inventory/move
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "inventoryItemId": "ITEM_ID",
+  "projectId": "PROJECT_ID",
+  "quantity": 10,
+  "note": "Delivered to site"
+}
+
+### Expenses (boss only)
+POST {{base}}/api/finance/expenses
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": 320,
+  "date": "2026-05-03",
+  "category": "MATERIALS",
+  "projectId": null,
+  "description": "Fuel"
+}
+
+### Monthly report (boss only)
+GET {{base}}/api/reports/monthly?year=2026&month=5
+Authorization: Bearer {{token}}
+
+### Custom P&L by range (boss only)
+POST {{base}}/api/reports/custom
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "from": "2026-05-01",
+  "to": "2026-05-31",
+  "projectId": "OPTIONAL_PROJECT_ID"
+}
+
+### Cron — monthly snapshot (set CRON_SECRET in env)
+GET {{base}}/api/cron/monthly-report
+Authorization: Bearer YOUR_CRON_SECRET

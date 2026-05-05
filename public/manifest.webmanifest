@@ -1,0 +1,11 @@
+{
+  "name": "Construction OS",
+  "short_name": "Construction OS",
+  "description": "Управление на строителна фирма — обекти, екипи, склад",
+  "lang": "bg",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#1e3a8a",
+  "icons": []
+}
