@@ -120,11 +120,11 @@ async function main() {
   if (!existingExp) {
     await prisma.expense.create({
       data: {
-        companyId: company.id,
+        company: { connect: { id: company.id } },
+        project: { connect: { id: project.id } },
         amount: 500,
         date: new Date(),
         category: ExpenseCategory.MATERIALS,
-        projectId: project.id,
         description: "Seed expense",
       },
     });
