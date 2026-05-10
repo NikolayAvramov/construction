@@ -24,12 +24,19 @@ async function projectIdsForBossCompany(
   return (data ?? []).map((r) => r.id);
 }
 
+function parseNadnik(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function mapWorkerRow(w: Record<string, unknown>) {
   return {
     id: w.id,
     name: w.name,
     role: w.role,
     groupId: w.group_id,
+    nadnik: parseNadnik(w.nadnik),
     createdAt: w.created_at,
     updatedAt: w.updated_at,
   };

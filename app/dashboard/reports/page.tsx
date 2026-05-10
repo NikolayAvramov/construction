@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import { formatEur } from "@/lib/format-currency";
 
 type Monthly = {
   year: number;
   month: number;
-  totalExpenses: string;
-  totalRevenue: string;
-  profit: string;
+  totalExpenses: number | string;
+  totalRevenue: number | string;
+  profit: number | string;
   onTheFly?: boolean;
 };
 
@@ -64,19 +65,19 @@ export default function ReportsPage() {
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-3">
               <dt className="text-slate-600">Разходи</dt>
               <dd className="font-semibold tabular-nums text-slate-900">
-                {report.totalExpenses}
+                {formatEur(report.totalExpenses)}
               </dd>
             </div>
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-3">
               <dt className="text-slate-600">Приходи (плащания)</dt>
               <dd className="font-semibold tabular-nums text-slate-900">
-                {report.totalRevenue}
+                {formatEur(report.totalRevenue)}
               </dd>
             </div>
             <div className="flex justify-between gap-4 pt-1">
               <dt className="font-semibold text-slate-900">Резултат</dt>
               <dd className="font-bold tabular-nums text-emerald-700">
-                {report.profit}
+                {formatEur(report.profit)}
               </dd>
             </div>
           </dl>

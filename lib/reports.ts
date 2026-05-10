@@ -45,23 +45,24 @@ export async function sumsForRangeCompany(
     .eq("company_id", companyId);
 
   const pids = (projects ?? []).map((p) => p.id);
-  if (pids.length === 0) {
-    return { totalExpenses: 0, totalRevenue: 0, profit: 0 };
-  }
 
   const { data: expRows } = await supabase
     .from("expenses")
     .select("amount")
-    .in("project_id", pids)
+    .eq("company_id", companyId)
     .gte("date", fromStr)
     .lte("date", toStr);
 
-  const { data: payRows } = await supabase
-    .from("payments")
-    .select("amount")
-    .in("project_id", pids)
-    .gte("date", fromStr)
-    .lte("date", toStr);
+  let payRows: { amount: unknown }[] | null = null;
+  if (pids.length > 0) {
+    const { data } = await supabase
+      .from("payments")
+      .select("amount")
+      .in("project_id", pids)
+      .gte("date", fromStr)
+      .lte("date", toStr);
+    payRows = data;
+  }
 
   const totalExpenses = (expRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
   const totalRevenue = (payRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
@@ -69,6 +70,7 @@ export async function sumsForRangeCompany(
 
   return { totalExpenses, totalRevenue, profit };
 }
+
 
 export async function generateMonthlyReport(year: number, month: number) {
   const supabase = await createClient();

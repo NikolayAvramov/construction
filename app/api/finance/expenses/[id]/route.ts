@@ -10,7 +10,11 @@ const patchSchema = z.object({
   amount: z.coerce.number().positive().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   category: z.nativeEnum(ExpenseCategory).optional(),
-  projectId: z.string().min(1).optional(),
+  projectId: z
+    .preprocess(
+      (v) => (v === "" || v === null ? null : v),
+      z.union([z.string().min(1), z.null()]).optional()
+    ),
   description: z.string().optional().nullable(),
 });
 
@@ -20,20 +24,13 @@ async function assertExpenseOwned(
   supabase: Awaited<ReturnType<typeof createClient>>,
   expenseId: string,
   companyId: string
-): Promise<{ project_id: string } | null> {
+): Promise<boolean> {
   const { data: e } = await supabase
     .from("expenses")
-    .select("id, project_id")
+    .select("id, company_id")
     .eq("id", expenseId)
     .maybeSingle();
-  if (!e) return null;
-  const { data: p } = await supabase
-    .from("projects")
-    .select("company_id")
-    .eq("id", e.project_id)
-    .maybeSingle();
-  if (!p || p.company_id !== companyId) return null;
-  return { project_id: e.project_id };
+  return Boolean(e && e.company_id === companyId);
 }
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -42,8 +39,13 @@ export async function PATCH(req: Request, { params }: Params) {
   const denied = requireBoss(session);
   if (denied) return denied;
 
+  const companyId = session!.companyId;
+  if (!companyId) {
+    return Response.json({ error: "Липсва фирма за профила." }, { status: 400 });
+  }
+
   const supabase = await createClient();
-  const owned = await assertExpenseOwned(supabase, id, session!.companyId!);
+  const owned = await assertExpenseOwned(supabase, id, companyId);
   if (!owned) {
     return Response.json({ error: "Разходът не е намерен." }, { status: 404 });
   }
@@ -58,12 +60,12 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   const d = parsed.data;
 
-  if (d.projectId) {
+  if (d.projectId !== undefined && d.projectId !== null) {
     const { data: p } = await supabase
       .from("projects")
       .select("id")
       .eq("id", d.projectId)
-      .eq("company_id", session!.companyId!)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (!p) {
       return Response.json({ error: "Обектът не е намерен." }, { status: 404 });
@@ -106,11 +108,18 @@ export async function DELETE(_req: Request, { params }: Params) {
   const denied = requireBoss(session);
   if (denied) return denied;
 
+  const companyId = session!.companyId;
+  if (!companyId) {
+    return Response.json({ error: "Липсва фирма за профила." }, { status: 400 });
+  }
+
   const supabase = await createClient();
-  const owned = await assertExpenseOwned(supabase, id, session!.companyId!);
+  const owned = await assertExpenseOwned(supabase, id, companyId);
   if (!owned) {
     return Response.json({ error: "Разходът не е намерен." }, { status: 404 });
   }
+
+  await supabase.from("worker_salary_payouts").delete().eq("expense_id", id);
 
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   if (error) {

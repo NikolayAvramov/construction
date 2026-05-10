@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import { formatEur } from "@/lib/format-currency";
 import { workerRoleBg, WORKER_ROLE_OPTIONS } from "@/lib/ui-labels";
 
 type ProjectMini = { id: string; name: string };
@@ -12,6 +13,7 @@ type WorkerRow = {
   name: string;
   role: string;
   groupId?: string | null;
+  nadnik?: number | null;
 };
 type GroupRow = {
   id: string;
@@ -43,6 +45,7 @@ export default function WorkersPage() {
   const [wName, setWName] = useState("");
   const [wRole, setWRole] = useState("WORKER");
   const [wGroupId, setWGroupId] = useState("");
+  const [wNadnik, setWNadnik] = useState("");
 
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
@@ -50,6 +53,7 @@ export default function WorkersPage() {
   const [ewName, setEwName] = useState("");
   const [ewRole, setEwRole] = useState("WORKER");
   const [ewGroupId, setEwGroupId] = useState("");
+  const [ewNadnik, setEwNadnik] = useState("");
   /** Разгънат екип — работниците се виждат само при клик върху реда на екипа */
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
 
@@ -122,15 +126,24 @@ export default function WorkersPage() {
     setMsg(null);
     setPendingWorker(true);
     try {
+      const nadnikPayload =
+        wNadnik.trim() === ""
+          ? {}
+          : (() => {
+              const n = Number(wNadnik.replace(",", "."));
+              return Number.isFinite(n) && n >= 0 ? { nadnik: n } : {};
+            })();
       await apiJson("/api/workers", {
         method: "POST",
         body: JSON.stringify({
           name: wName.trim(),
           role: wRole,
           groupId: wGroupId,
+          ...nadnikPayload,
         }),
       });
       setWName("");
+      setWNadnik("");
       setMsg("Работникът е добавен.");
       await reloadGroups();
     } catch (e) {
@@ -173,12 +186,22 @@ export default function WorkersPage() {
     setErr(null);
     setMsg(null);
     try {
+      const patchNadnik =
+        ewNadnik.trim() === ""
+          ? { nadnik: null }
+          : (() => {
+              const n = Number(ewNadnik.replace(",", "."));
+              return Number.isFinite(n) && n >= 0
+                ? { nadnik: n }
+                : { nadnik: null };
+            })();
       await apiJson(`/api/workers/${wid}`, {
         method: "PATCH",
         body: JSON.stringify({
           name: ewName.trim(),
           role: ewRole,
           groupId: ewGroupId || null,
+          ...patchNadnik,
         }),
       });
       setEditWorkerId(null);
@@ -310,6 +333,22 @@ export default function WorkersPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-xs font-semibold text-slate-700">
+              Надник (EUR / работен ден)
+            </span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              value={wNadnik}
+              onChange={(e) => setWNadnik(e.target.value)}
+              placeholder="по избор"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              disabled={!projectId || groups.length === 0}
+            />
           </label>
         </div>
         <button
@@ -457,6 +496,21 @@ export default function WorkersPage() {
                                   </option>
                                 ))}
                               </select>
+                              <label className="sm:col-span-2">
+                                <span className="text-[10px] font-semibold text-slate-600">
+                                  Надник (EUR / ден)
+                                </span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="0.01"
+                                  value={ewNadnik}
+                                  onChange={(e) => setEwNadnik(e.target.value)}
+                                  placeholder="празно = без ставка"
+                                  className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                                />
+                              </label>
                               <div className="flex gap-2 sm:col-span-2">
                                 <button
                                   type="button"
@@ -482,6 +536,11 @@ export default function WorkersPage() {
                                 </p>
                                 <p className="text-xs text-slate-600">
                                   {workerRoleBg(w.role)}
+                                  {w.nadnik != null ? (
+                                    <span className="mt-0.5 block text-slate-500">
+                                      Надник: {formatEur(w.nadnik)}/ден
+                                    </span>
+                                  ) : null}
                                 </p>
                               </div>
                               <div className="flex gap-2">
@@ -493,6 +552,9 @@ export default function WorkersPage() {
                                     setEwName(w.name);
                                     setEwRole(w.role);
                                     setEwGroupId(w.groupId ?? g.id);
+                                    setEwNadnik(
+                                      w.nadnik != null ? String(w.nadnik) : ""
+                                    );
                                     setOpenGroupId(g.id);
                                   }}
                                 >

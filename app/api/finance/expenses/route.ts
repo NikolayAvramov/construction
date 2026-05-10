@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ExpenseCategory } from "@/lib/enums";
 import { getSessionFromRequest } from "@/lib/auth";
 import { requireBoss } from "@/lib/rbac";
+import { appendFinanceSqlHint } from "@/lib/finance-sql-hint";
 import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,11 @@ const expenseSchema = z.object({
   amount: z.coerce.number().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   category: z.nativeEnum(ExpenseCategory),
-  projectId: z.string().min(1),
+  projectId: z
+    .preprocess(
+      (v) => (v === "" || v === null || v === undefined ? undefined : v),
+      z.string().min(1).optional()
+    ),
   description: z.string().optional(),
 });
 
@@ -32,22 +37,18 @@ export async function GET(req: Request) {
     .select("id")
     .eq("company_id", companyId);
   const pids = (projects ?? []).map((p) => p.id);
-  if (pids.length === 0) {
-    return Response.json([]);
-  }
-
-  let filterIds = pids;
-  if (projectId) {
-    filterIds = pids.includes(projectId) ? [projectId] : [];
-  }
-  if (filterIds.length === 0) {
-    return Response.json([]);
-  }
 
   let q = supabase
     .from("expenses")
     .select("*, projects(id, name)")
-    .in("project_id", filterIds);
+    .eq("company_id", companyId);
+
+  if (projectId) {
+    if (!pids.includes(projectId)) {
+      return Response.json([]);
+    }
+    q = q.eq("project_id", projectId);
+  }
 
   if (from) {
     q = q.gte("date", from);
@@ -59,7 +60,8 @@ export async function GET(req: Request) {
   const { data: rows, error } = await q.order("date", { ascending: false });
 
   if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    const msg = error.message;
+    return Response.json({ error: msg + appendFinanceSqlHint(msg) }, { status: 500 });
   }
 
   const mapped = (rows ?? []).map((r) => ({
@@ -71,7 +73,7 @@ export async function GET(req: Request) {
     description: r.description,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-    project: (r as { projects?: { id: string; name: string } }).projects,
+    project: (r as { projects?: { id: string; name: string } | null }).projects,
   }));
 
   return Response.json(mapped);
@@ -81,6 +83,11 @@ export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
   const denied = requireBoss(session);
   if (denied) return denied;
+
+  const companyId = session!.companyId;
+  if (!companyId) {
+    return Response.json({ error: "Липсва фирма за профила." }, { status: 400 });
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = expenseSchema.safeParse(body);
@@ -93,31 +100,38 @@ export async function POST(req: Request) {
   const d = parsed.data;
 
   const supabase = await createClient();
-  const { data: p } = await supabase
-    .from("projects")
-    .select("id")
-    .eq("id", d.projectId)
-    .eq("company_id", session!.companyId!)
-    .maybeSingle();
 
-  if (!p) {
-    return Response.json({ error: "Project not found" }, { status: 404 });
+  let projectId: string | null = null;
+  if (d.projectId) {
+    const { data: p } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", d.projectId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (!p) {
+      return Response.json({ error: "Обектът не е намерен." }, { status: 404 });
+    }
+    projectId = d.projectId;
   }
 
   const { data: row, error } = await supabase
     .from("expenses")
     .insert({
+      company_id: companyId,
       amount: d.amount,
       date: d.date,
       category: d.category,
-      project_id: d.projectId,
+      project_id: projectId,
       description: d.description ?? null,
     })
     .select("*")
     .single();
 
   if (error || !row) {
-    return Response.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
+    const msg = error?.message ?? "Insert failed";
+    return Response.json({ error: msg + appendFinanceSqlHint(msg) }, { status: 500 });
   }
 
   return Response.json(

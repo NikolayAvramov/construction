@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import { formatEur } from "@/lib/format-currency";
 import { expenseCategoryBg, EXPENSE_CATEGORY_OPTIONS } from "@/lib/ui-labels";
 
 type ProjectMini = { id: string; name: string };
@@ -33,6 +34,38 @@ const btnDanger =
   "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100";
 
 type Tab = "expenses" | "payments";
+
+type PendingSalaryItem = {
+  workerId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+  workDays: number;
+  nadnik: number;
+  amount: number;
+  year: number;
+  month: number;
+  paid: boolean;
+};
+
+function currentYearMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftYearMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthTitleBg(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("bg-BG", {
+    month: "long",
+    year: "numeric",
+  });
+}
 
 export default function ExpensesPage() {
   const router = useRouter();
@@ -73,6 +106,27 @@ export default function ExpensesPage() {
   const [epProj, setEpProj] = useState("");
   const [epDesc, setEpDesc] = useState("");
 
+  const [salaryYm, setSalaryYm] = useState(currentYearMonth);
+  const [salaryItems, setSalaryItems] = useState<PendingSalaryItem[]>([]);
+  const [salaryLoading, setSalaryLoading] = useState(false);
+  const [salaryPayingId, setSalaryPayingId] = useState<string | null>(null);
+
+  const loadPendingSalaries = useCallback(async () => {
+    if (!user || user.role !== "BOSS") return;
+    const [y, m] = salaryYm.split("-").map(Number);
+    setSalaryLoading(true);
+    try {
+      const r = await apiJson<{ items: PendingSalaryItem[] }>(
+        `/api/finance/pending-salaries?year=${y}&month=${m}`
+      );
+      setSalaryItems(r.items);
+    } catch {
+      setSalaryItems([]);
+    } finally {
+      setSalaryLoading(false);
+    }
+  }, [user, salaryYm]);
+
   useEffect(() => {
     apiJson<AuthUser>("/api/auth/me").then((u) => {
       setUser(u);
@@ -84,10 +138,7 @@ export default function ExpensesPage() {
     if (!user || user.role !== "BOSS") return;
     apiJson<ProjectMini[]>("/api/projects").then((list) => {
       setProjects(list);
-      if (list[0]) {
-        if (!projectId) setProjectId(list[0].id);
-        if (!payProjectId) setPayProjectId(list[0].id);
-      }
+      if (list[0] && !payProjectId) setPayProjectId(list[0].id);
     });
   }, [user]);
 
@@ -106,9 +157,38 @@ export default function ExpensesPage() {
     void refreshPay();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.role !== "BOSS" || tab !== "expenses") return;
+    void loadPendingSalaries();
+  }, [user, tab, loadPendingSalaries]);
+
+  async function payWorkerSalary(workerId: string) {
+    const [y, m] = salaryYm.split("-").map(Number);
+    setErr(null);
+    setMsg(null);
+    setSalaryPayingId(workerId);
+    try {
+      await apiJson("/api/finance/pay-worker-salary", {
+        method: "POST",
+        body: JSON.stringify({
+          workerId,
+          year: y,
+          month: m,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+      });
+      setMsg("Заплатата е записана като разход (заплати).");
+      await refreshExp();
+      await loadPendingSalaries();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Грешка при плащане");
+    } finally {
+      setSalaryPayingId(null);
+    }
+  }
+
   async function addExpense(e: React.FormEvent) {
     e.preventDefault();
-    if (!projectId) return;
     setErr(null);
     setMsg(null);
     setPending(true);
@@ -124,7 +204,7 @@ export default function ExpensesPage() {
           amount: n,
           date,
           category,
-          projectId,
+          ...(projectId.trim() !== "" ? { projectId: projectId.trim() } : {}),
           description: description.trim() || undefined,
         }),
       });
@@ -185,7 +265,7 @@ export default function ExpensesPage() {
           amount: n,
           date: eeDate,
           category: eeCat,
-          projectId: eeProj,
+          projectId: eeProj.trim() === "" ? null : eeProj.trim(),
           description: eeDesc.trim() || null,
         }),
       });
@@ -293,19 +373,124 @@ export default function ExpensesPage() {
 
       {tab === "expenses" ? (
         <>
+          <section className={panel}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Заплати на работници
+                </h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  По надник и записани присъствия за месеца. „Плати“ записва разход
+                  и отбелязва месеца като платен — в месечния календар се показва
+                  „Платено“. Платените редове остават в списъка със статус (не се
+                  плаща втори път).
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSalaryYm((y) => shiftYearMonth(y, -1))}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  aria-label="Предишен месец"
+                >
+                  ←
+                </button>
+                <span className="min-w-[10rem] text-center text-sm font-semibold capitalize text-slate-800">
+                  {monthTitleBg(salaryYm)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSalaryYm((y) => shiftYearMonth(y, 1))}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  aria-label="Следващ месец"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+
+            {salaryLoading ? (
+              <p className="mt-4 text-sm text-slate-500">Зареждане…</p>
+            ) : salaryItems.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+                Няма изчислени заплати за този месец (надник и поне един ден
+                присъствие).
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[32rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      <th className="px-3 py-2">Работник</th>
+                      <th className="px-3 py-2">Обект</th>
+                      <th className="px-3 py-2 text-right tabular-nums">Дни</th>
+                      <th className="px-3 py-2 text-right tabular-nums">Надник</th>
+                      <th className="px-3 py-2 text-right tabular-nums">Сума</th>
+                      <th className="px-3 py-2">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salaryItems.map((row) => (
+                      <tr
+                        key={row.workerId}
+                        className="border-b border-slate-100 last:border-0"
+                      >
+                        <td className="px-3 py-2.5 font-medium text-slate-900">
+                          {row.name}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600">
+                          {row.projectName}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                          {row.workDays}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
+                          {formatEur(row.nadnik)}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                          {formatEur(row.amount)}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {row.paid ? (
+                            <span className="inline-flex rounded-md border border-emerald-500/70 bg-emerald-50 px-2 py-1 text-xs font-bold uppercase tracking-wide text-emerald-900">
+                              Платено
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void payWorkerSalary(row.workerId)}
+                              disabled={salaryPayingId !== null}
+                              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
+                            >
+                              {salaryPayingId === row.workerId
+                                ? "Запис…"
+                                : "Плати"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           <form onSubmit={addExpense} className={panel}>
             <h2 className="text-sm font-semibold text-slate-900">Нов разход</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block sm:col-span-2">
                 <span className="text-xs font-semibold text-slate-700">
-                  Обект
+                  Обект <span className="font-normal text-slate-500">(по избор)</span>
                 </span>
                 <select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                  required
                 >
+                  <option value="">
+                    — Без обект (фирмен: гориво, осигуровки и др.) —
+                  </option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -315,7 +500,7 @@ export default function ExpensesPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-700">
-                  Сума (лв.)
+                  Сума (EUR)
                 </span>
                 <input
                   value={amount}
@@ -364,7 +549,7 @@ export default function ExpensesPage() {
             </div>
             <button
               type="submit"
-              disabled={pending || projects.length === 0}
+              disabled={pending}
               className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
             >
               {pending ? "Запис…" : "Добави разход"}
@@ -405,6 +590,9 @@ export default function ExpensesPage() {
                       onChange={(e) => setEeProj(e.target.value)}
                       className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm sm:col-span-2"
                     >
+                      <option value="">
+                        — Без обект (фирмен разход) —
+                      </option>
                       {projects.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
@@ -438,16 +626,15 @@ export default function ExpensesPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-lg font-bold tabular-nums text-slate-900">
-                        {String(r.amount)} лв.
+                        {formatEur(r.amount)}
                       </p>
                       <p className="text-sm font-medium text-slate-700">
                         {expenseCategoryBg(r.category)}
-                        {r.project?.name ? (
-                          <span className="font-normal text-slate-500">
-                            {" "}
-                            · {r.project.name}
-                          </span>
-                        ) : null}
+                        <span className="font-normal text-slate-500">
+                          {" "}
+                          ·{" "}
+                          {r.project?.name ?? "Без обект (фирмен)"}
+                        </span>
                       </p>
                       <p className="text-xs text-slate-500">
                         {new Date(r.date).toLocaleDateString("bg-BG")}
@@ -467,7 +654,7 @@ export default function ExpensesPage() {
                           setEeAmount(String(r.amount));
                           setEeDate(r.date);
                           setEeCat(r.category);
-                          setEeProj(r.projectId ?? projectId);
+                          setEeProj(r.projectId ?? "");
                           setEeDesc(r.description ?? "");
                         }}
                       >
@@ -511,7 +698,7 @@ export default function ExpensesPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-700">
-                  Сума (лв.)
+                  Сума (EUR)
                 </span>
                 <input
                   value={payAmount}
@@ -606,7 +793,7 @@ export default function ExpensesPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-lg font-bold tabular-nums text-emerald-800">
-                        +{String(r.amount)} лв.
+                        +{formatEur(r.amount)}
                       </p>
                       <p className="text-sm text-slate-600">
                         {r.project?.name ?? "Обект"}

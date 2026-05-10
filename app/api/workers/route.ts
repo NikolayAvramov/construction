@@ -6,12 +6,19 @@ import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function parseNadnik(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function mapWorkerRow(w: Record<string, unknown>) {
   return {
     id: w.id,
     name: w.name,
     role: w.role,
     groupId: w.group_id,
+    nadnik: parseNadnik(w.nadnik),
     createdAt: w.created_at,
     updatedAt: w.updated_at,
   };
@@ -20,7 +27,21 @@ function mapWorkerRow(w: Record<string, unknown>) {
 const workerCreateSchema = z.object({
   name: z.string().min(1),
   role: z.nativeEnum(WorkerRole).optional(),
-  groupId: z.string().optional().nullable(),
+  groupId: z.preprocess(
+    (val) => (val === "" ? null : val),
+    z.union([z.string().min(1), z.null()]).optional()
+  ),
+  nadnik: z
+    .preprocess((val) => {
+      if (val === undefined) return undefined;
+      if (val === null) return null;
+      if (typeof val === "number" && Number.isFinite(val)) return val;
+      if (typeof val === "string" && val.trim() !== "") {
+        const n = Number(val.replace(",", "."));
+        return Number.isFinite(n) ? n : val;
+      }
+      return val;
+    }, z.union([z.number().nonnegative(), z.null()]).optional()),
 });
 
 async function projectIdsForBossCompany(
@@ -149,11 +170,14 @@ export async function POST(req: Request) {
     }
   }
 
-  const insert = {
+  const insert: Record<string, unknown> = {
     name: d.name,
     role: d.role ?? WorkerRole.WORKER,
     group_id: d.groupId ?? null,
   };
+  if (d.nadnik !== undefined) {
+    insert.nadnik = d.nadnik;
+  }
 
   const { data: w, error } = await supabase
     .from("workers")

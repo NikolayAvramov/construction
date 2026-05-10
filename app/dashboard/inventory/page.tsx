@@ -4,22 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
-
-function formatEur(
-  value: number | string | null | undefined,
-  maxFractionDigits = 4
-): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const n =
-    typeof value === "string" ? Number(value.replace(",", ".")) : value;
-  if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("bg-BG", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(n);
-}
+import { formatEur } from "@/lib/format-currency";
 
 type Item = {
   id: string;
@@ -385,7 +370,7 @@ export default function InventoryPage() {
                       <p className="mt-1 text-sm text-slate-600">
                         Цена за единица:{" "}
                         <span className="font-medium tabular-nums text-slate-800">
-                          {formatEur(i.unitCostEur)}
+                          {formatEur(i.unitCostEur, 4)}
                         </span>
                       </p>
                     ) : null}

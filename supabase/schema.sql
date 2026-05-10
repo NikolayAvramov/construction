@@ -95,6 +95,7 @@ CREATE TABLE public.workers (
   name text NOT NULL,
   role text NOT NULL DEFAULT 'WORKER' CHECK (role IN ('WORKER', 'FOREMAN')),
   group_id uuid REFERENCES public.worker_groups (id) ON DELETE SET NULL,
+  nadnik numeric(12, 2),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -165,6 +166,7 @@ CREATE TABLE public.material_movements (
 -- ─── Finance ────────────────────────────────────────────────────────────────
 CREATE TABLE public.expenses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
   amount numeric(14, 2) NOT NULL,
   date date NOT NULL,
   category text NOT NULL CHECK (
@@ -176,9 +178,25 @@ CREATE TABLE public.expenses (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE INDEX expenses_company_id_idx ON public.expenses (company_id);
+
 CREATE TRIGGER expenses_updated_at
   BEFORE UPDATE ON public.expenses
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE public.worker_salary_payouts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
+  worker_id uuid NOT NULL REFERENCES public.workers (id) ON DELETE CASCADE,
+  year int NOT NULL,
+  month int NOT NULL CHECK (month >= 1 AND month <= 12),
+  expense_id uuid REFERENCES public.expenses (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (worker_id, year, month)
+);
+
+CREATE INDEX worker_salary_payouts_company_ym_idx
+  ON public.worker_salary_payouts (company_id, year, month);
 
 CREATE TABLE public.payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -216,6 +234,7 @@ ALTER TABLE public.attendances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_work_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.material_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.worker_salary_payouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_reports ENABLE ROW LEVEL SECURITY;
@@ -250,6 +269,10 @@ CREATE POLICY "authenticated_all_inventory" ON public.inventory_items
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE POLICY "authenticated_all_movements" ON public.material_movements
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "authenticated_all_worker_salary_payouts"
+  ON public.worker_salary_payouts
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE POLICY "authenticated_all_expenses" ON public.expenses

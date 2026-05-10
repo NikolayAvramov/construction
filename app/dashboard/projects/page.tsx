@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import { formatEur } from "@/lib/format-currency";
 import { projectStatusBg, PROJECT_STATUS_OPTIONS } from "@/lib/ui-labels";
 
 type GroupSummary = { id: string; name: string; workerCount: number };
@@ -33,16 +34,6 @@ const btnSecondary =
   "min-h-[44px] rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs";
 const btnDanger =
   "min-h-[44px] rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-100 sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs";
-
-function formatLv(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const x = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(x)) return "—";
-  return `${new Intl.NumberFormat("bg-BG", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(x)}\u00a0лв.`;
-}
 
 export default function ProjectsPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -300,7 +291,7 @@ export default function ProjectsPage() {
             </label>
             <label className="block">
               <span className="text-xs font-semibold text-slate-700">
-                Договорна стойност (лв.)
+                Договорна стойност (EUR)
               </span>
               <input
                 value={newTotal}
@@ -336,7 +327,7 @@ export default function ProjectsPage() {
             {newAdvance ? (
               <label className="block sm:col-span-2">
                 <span className="text-xs font-semibold text-slate-700">
-                  Сума аванс (лв.)
+                  Сума аванс (EUR)
                 </span>
                 <input
                   value={newAdvanceAmt}
@@ -462,7 +453,7 @@ export default function ProjectsPage() {
                             Договорна стойност
                           </dt>
                           <dd className="mt-0.5 tabular-nums text-base font-semibold text-slate-900">
-                            {formatLv(p.totalPrice)}
+                            {formatEur(p.totalPrice)}
                           </dd>
                         </div>
                         <div>
@@ -474,7 +465,7 @@ export default function ProjectsPage() {
                               <span className="font-semibold text-emerald-800 tabular-nums">
                                 {p.advanceAmount != null &&
                                 String(p.advanceAmount) !== ""
-                                  ? formatLv(p.advanceAmount)
+                                  ? formatEur(p.advanceAmount)
                                   : "Да — без посочена сума"}
                               </span>
                             ) : (
@@ -488,7 +479,7 @@ export default function ProjectsPage() {
                               Постъпили плащания (сумарно)
                             </dt>
                             <dd className="mt-0.5 tabular-nums text-base font-semibold text-blue-900">
-                              {formatLv(p.paymentsReceivedTotal ?? 0)}
+                              {formatEur(p.paymentsReceivedTotal ?? 0)}
                             </dd>
                           </div>
                         ) : null}
