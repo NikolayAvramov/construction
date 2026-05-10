@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   description:
     "Обекти, екипи, склад и финанси — централизирано управление за строителни компании.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

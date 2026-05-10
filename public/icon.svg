@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Construction">
+  <rect width="32" height="32" rx="7" fill="#1e3a8a"/>
+  <!-- кула -->
+  <rect x="14.5" y="5" width="3.5" height="23" fill="#64748b" rx="0.6"/>
+  <!-- противтежест -->
+  <path stroke="#475569" stroke-width="2" stroke-linecap="round" fill="none" d="M16.25 7L4.5 10.5"/>
+  <!-- стрела -->
+  <path stroke="#cbd5e1" stroke-width="2.2" stroke-linecap="round" fill="none" d="M16.25 7L30 3.5"/>
+  <!-- въже -->
+  <path stroke="#e2e8f0" stroke-width="1" d="M28.5 4.5v12"/>
+  <!-- кука -->
+  <path fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" d="M28.5 16.5v4q0 1.6-1.4 1.6"/>
+  <!-- мистрия (отпред) -->
+  <path fill="#78350f" d="M3 26.5l6.2-6.2 1.6 1.6-6.2 6.2a1.1 1.1 0 01-1.6 0l-.8-.8a1.1 1.1 0 010-1.6z"/>
+  <path fill="#94a3b8" d="M9.5 19.8l3.4 3.4c.35.35.35.9 0 1.25l-.35.35c-.25.25-.7.35-1 .15l-4.1-4.1 1.15-1.15c.35-.35.9-.35 1.25 0z"/>
+  <!-- каска -->
+  <path fill="#fbbf24" d="M18.5 20c-2.2 0-4.1 1.2-4.8 3h9.6c-.7-1.8-2.6-3-4.8-3z"/>
+  <path fill="#f59e0b" d="M13.2 23.4c-.25 0-.45.2-.45.45v.9c0 1.05.75 1.95 1.75 2.25v.25h8v-.25c1-.3 1.75-1.2 1.75-2.25v-.9c0-.25-.2-.45-.45-.45h-10.6z"/>
+</svg>
