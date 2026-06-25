@@ -2,6 +2,10 @@ import { z } from "zod";
 import { ProjectStatus, UserRole } from "@/lib/enums";
 import { getSessionFromRequest } from "@/lib/auth";
 import { mapProject } from "@/lib/map-supabase";
+import {
+  describeProjectPatch,
+  insertProjectEvent,
+} from "@/lib/project-history";
 import { projectPublic } from "@/lib/projects";
 import { foremanCanAccessProject, requireAuth, requireBoss } from "@/lib/rbac";
 import { createClient } from "@/utils/supabase/server";
@@ -78,7 +82,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("projects")
-    .select("company_id")
+    .select("*")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -116,6 +120,28 @@ export async function PATCH(req: Request, { params }: Params) {
     return Response.json({ error: "Update failed" }, { status: 500 });
   }
 
+  const detail = describeProjectPatch(
+    existing as Record<string, unknown>,
+    updated as Record<string, unknown>
+  );
+  if (detail) {
+    const { data: actor } = await supabase
+      .from("profiles")
+      .select("name")
+      .eq("id", session!.sub)
+      .maybeSingle();
+    await insertProjectEvent(supabase, {
+      companyId: session!.companyId!,
+      projectId,
+      projectName: updated.name as string,
+      actorId: session!.sub,
+      actorName: (actor?.name as string | null) ?? null,
+      kind: "UPDATED",
+      title: "Промени по обекта",
+      detail,
+    });
+  }
+
   return Response.json(mapProject(updated));
 }
 
@@ -128,7 +154,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("projects")
-    .select("id")
+    .select("id, name")
     .eq("id", projectId)
     .eq("company_id", session!.companyId!)
     .maybeSingle();
@@ -136,6 +162,23 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (!existing) {
     return Response.json({ error: "Обектът не е намерен." }, { status: 404 });
   }
+
+  const { data: actor } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", session!.sub)
+    .maybeSingle();
+
+  await insertProjectEvent(supabase, {
+    companyId: session!.companyId!,
+    projectId,
+    projectName: existing.name as string,
+    actorId: session!.sub,
+    actorName: (actor?.name as string | null) ?? null,
+    kind: "DELETED",
+    title: "Обектът е изтрит",
+    detail: "Записът е премахнат от системата. Свързаните данни се третират според правилата в базата.",
+  });
 
   const { error } = await supabase.from("projects").delete().eq("id", projectId);
   if (error) {

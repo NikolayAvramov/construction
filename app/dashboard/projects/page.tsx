@@ -5,6 +5,20 @@ import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
 import { formatEur } from "@/lib/format-currency";
 import { projectStatusBg, PROJECT_STATUS_OPTIONS } from "@/lib/ui-labels";
+import {
+  btnDanger,
+  btnPrimary,
+  btnSecondary,
+  inputBase,
+  labelText,
+  listCard,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { ProjectHistoryItem } from "@/lib/project-history";
 
 type GroupSummary = { id: string; name: string; workerCount: number };
 
@@ -27,13 +41,6 @@ type AssignedFm = {
   name?: string;
   email?: string;
 };
-
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-6";
-const btnSecondary =
-  "min-h-[44px] rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs";
-const btnDanger =
-  "min-h-[44px] rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-100 sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs";
 
 export default function ProjectsPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -61,6 +68,17 @@ export default function ProjectsPage() {
   const [fmOpenFor, setFmOpenFor] = useState<string | null>(null);
   const [assignedFm, setAssignedFm] = useState<AssignedFm[]>([]);
   const [addFmUserId, setAddFmUserId] = useState("");
+  const [sheetProject, setSheetProject] = useState(false);
+  const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
+  const [historyCache, setHistoryCache] = useState<
+    Record<string, ProjectHistoryItem[]>
+  >({});
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   useEffect(() => {
     apiJson<AuthUser>("/api/auth/me")
@@ -132,6 +150,7 @@ export default function ProjectsPage() {
       setNewAdvance(false);
       setNewAdvanceAmt("");
       setNewStatus("ACTIVE");
+      setSheetProject(false);
       setMsg("Обектът е добавен.");
       await refreshList();
     } catch (err) {
@@ -185,29 +204,76 @@ export default function ProjectsPage() {
       });
       setEditId(null);
       setMsg("Обектът е обновен.");
+      setHistoryCache((prev) => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
       await refreshList();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Грешка");
     }
   }
 
-  async function deleteProject(projectId: string) {
-    if (
-      !confirm(
-        "Изтриване на обекта? Свързаните данни (групи, разходи и др.) също ще бъдат засегнати според правилата в базата."
-      )
-    )
-      return;
+  async function loadHistory(projectId: string) {
+    setHistoryLoading(projectId);
     setError(null);
     try {
-      await apiJson(`/api/projects/${projectId}`, { method: "DELETE" });
+      const r = await apiJson<{ items: ProjectHistoryItem[] }>(
+        `/api/projects/${projectId}/history`
+      );
+      setHistoryCache((prev) => ({ ...prev, [projectId]: r.items }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Грешка при зареждане на историята.");
+    } finally {
+      setHistoryLoading(null);
+    }
+  }
+
+  function toggleHistory(projectId: string) {
+    if (historyOpenFor === projectId) {
+      setHistoryOpenFor(null);
+      return;
+    }
+    setHistoryOpenFor(projectId);
+    if (!historyCache[projectId]) void loadHistory(projectId);
+  }
+
+  async function confirmDeleteProject() {
+    if (!deleteTarget) return;
+    setDeletePending(true);
+    setError(null);
+    try {
+      await apiJson(`/api/projects/${deleteTarget.id}`, { method: "DELETE" });
       setMsg("Обектът е изтрит.");
+      setDeleteTarget(null);
       setFmOpenFor(null);
       setEditId(null);
+      setHistoryOpenFor(null);
+      setHistoryCache((prev) => {
+        const next = { ...prev };
+        delete next[deleteTarget.id];
+        return next;
+      });
       await refreshList();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Грешка");
+    } finally {
+      setDeletePending(false);
     }
+  }
+
+  function historyKindLabel(kind: string): string {
+    const m: Record<string, string> = {
+      CREATED: "Създаване",
+      UPDATED: "Редакция",
+      DELETED: "Изтриване",
+      PAYMENT: "Плащане",
+      EXPENSE: "Разход",
+      MATERIAL: "Материал",
+      DAILY_WORK: "Дневник",
+    };
+    return m[kind] ?? kind;
   }
 
   async function assignForeman(projectId: string) {
@@ -250,63 +316,78 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-          {boss ? "Обекти" : "Моите обекти"}
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Преглед за полето: локация, договор и аванс, екипи на обекта
-          {boss ? " и постъпили плащания" : ""}.
-        </p>
-      </div>
+      <PageHeader
+        title={boss ? "Обекти" : "Моите обекти"}
+        description={
+          boss
+            ? "Преглед на обектите. Добавяне и редакция — от бутона „Добави обект“."
+            : "Преглед за полето: локация, договор и аванс, екипи на обекта."
+        }
+      >
+        {boss ? (
+          <AddButton onClick={() => setSheetProject(true)}>Добави обект</AddButton>
+        ) : null}
+      </PageHeader>
+
+      <FlashMessages success={msg} error={error} />
+
+      {boss && deleteTarget ? (
+        <ConfirmDialog
+          open
+          title="Изтриване на обект?"
+          description="Това действие е необратимо. Ще бъдат засегнати екипи, график, плащания и други свързани записи според правилата в базата. За потвърждение напишете точното име на обекта."
+          confirmLabel="Изтрий обекта"
+          confirmText={deleteTarget.name}
+          confirmTextLabel={`Напишете „${deleteTarget.name}“, за да изтриете`}
+          pending={deletePending}
+          onConfirm={() => void confirmDeleteProject()}
+          onCancel={() => !deletePending && setDeleteTarget(null)}
+        />
+      ) : null}
 
       {boss ? (
-        <form onSubmit={createProject} className={panel}>
-          <h2 className="text-sm font-semibold text-slate-900">Нов обект</h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Добавете строителен обект с локация и договорна стойност.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <FormSheet
+          open={sheetProject}
+          onClose={() => setSheetProject(false)}
+          title="Нов обект"
+          description="Строителен обект с локация и договорна стойност."
+        >
+          <form onSubmit={createProject} className="grid gap-3 sm:grid-cols-2">
             <label className="block sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-700">
-                Наименование
-              </span>
+              <span className={labelText}>Наименование</span>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm sm:py-2.5 sm:text-sm"
+                className={inputBase}
                 required
+                autoFocus
               />
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-700">
-                Локация
-              </span>
+              <span className={labelText}>Локация</span>
               <input
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm sm:py-2.5 sm:text-sm"
+                className={inputBase}
                 required
               />
             </label>
             <label className="block">
-              <span className="text-xs font-semibold text-slate-700">
-                Договорна стойност (EUR)
-              </span>
+              <span className={labelText}>Договорна стойност (EUR)</span>
               <input
                 value={newTotal}
                 onChange={(e) => setNewTotal(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm tabular-nums sm:py-2.5 sm:text-sm"
+                className={`${inputBase} tabular-nums`}
                 required
                 inputMode="decimal"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-semibold text-slate-700">Статус</span>
+              <span className={labelText}>Статус</span>
               <select
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm sm:py-2.5 sm:text-sm"
+                className={inputBase}
               >
                 {PROJECT_STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -326,45 +407,36 @@ export default function ProjectsPage() {
             </label>
             {newAdvance ? (
               <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Сума аванс (EUR)
-                </span>
+                <span className={labelText}>Сума аванс (EUR)</span>
                 <input
                   value={newAdvanceAmt}
                   onChange={(e) => setNewAdvanceAmt(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm tabular-nums sm:py-2.5 sm:text-sm"
+                  className={`${inputBase} tabular-nums`}
                   inputMode="decimal"
                 />
               </label>
             ) : null}
-          </div>
-          <button
-            type="submit"
-            disabled={pending}
-            className="mt-5 min-h-[48px] w-full rounded-lg bg-slate-900 py-3 text-base font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 sm:text-sm"
-          >
-            {pending ? "Запис…" : "Добави обект"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={pending}
+              className={`sm:col-span-2 ${btnPrimary}`}
+            >
+              {pending ? "Запис…" : "Добави обект"}
+            </button>
+          </form>
+        </FormSheet>
       ) : null}
 
-      {msg ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
-
-      <ul className="space-y-4">
+      <ul className="space-y-4 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
+        {projects.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+            {boss
+              ? "Няма обекти. Натиснете „Добави обект“, за да създадете първия."
+              : "Няма назначени обекти."}
+          </li>
+        ) : null}
         {projects.map((p) => (
-          <li
-            key={p.id}
-            className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-5"
-          >
+          <li key={p.id} className={listCard}>
             {editId === p.id && boss ? (
               <div className="space-y-3">
                 <input
@@ -511,14 +583,39 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                   </div>
+                  <div
+                    className={
+                      boss
+                        ? "grid grid-cols-1 gap-2 sm:w-40 sm:shrink-0"
+                        : "mt-4"
+                    }
+                  >
+                    {!boss ? (
+                      <button
+                        type="button"
+                        className={`${btnSecondary} w-full`}
+                        onClick={() => toggleHistory(p.id)}
+                      >
+                        {historyOpenFor === p.id
+                          ? "Скрий история"
+                          : "История"}
+                      </button>
+                    ) : null}
                   {boss ? (
-                    <div className="grid grid-cols-1 gap-2 sm:w-40 sm:shrink-0">
+                    <>
                       <button
                         type="button"
                         className={btnSecondary}
                         onClick={() => startEdit(p)}
                       >
                         Редактирай
+                      </button>
+                      <button
+                        type="button"
+                        className={btnSecondary}
+                        onClick={() => toggleHistory(p.id)}
+                      >
+                        {historyOpenFor === p.id ? "Скрий история" : "История"}
                       </button>
                       <button
                         type="button"
@@ -532,13 +629,66 @@ export default function ProjectsPage() {
                       <button
                         type="button"
                         className={btnDanger}
-                        onClick={() => void deleteProject(p.id)}
+                        onClick={() =>
+                          setDeleteTarget({ id: p.id, name: p.name })
+                        }
                       >
                         Изтрий обект
                       </button>
-                    </div>
+                    </>
                   ) : null}
+                  </div>
                 </div>
+
+                {historyOpenFor === p.id ? (
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <p className="text-xs font-semibold text-slate-700">
+                      История на обекта
+                    </p>
+                    {historyLoading === p.id ? (
+                      <p className="mt-3 text-sm text-slate-500">Зареждане…</p>
+                    ) : (historyCache[p.id] ?? []).length === 0 ? (
+                      <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+                        Няма записи в историята за този обект.
+                      </p>
+                    ) : (
+                      <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+                        {(historyCache[p.id] ?? []).map((ev) => (
+                          <li
+                            key={ev.id}
+                            className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-sm"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex rounded-md bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">
+                                {historyKindLabel(ev.kind)}
+                              </span>
+                              <span className="font-semibold text-slate-900">
+                                {ev.title}
+                              </span>
+                              {boss &&
+                              ev.amountEur != null &&
+                              Number.isFinite(ev.amountEur) ? (
+                                <span className="tabular-nums font-semibold text-emerald-800">
+                                  {formatEur(ev.amountEur)}
+                                </span>
+                              ) : null}
+                            </div>
+                            {ev.detail ? (
+                              <p className="mt-1 text-slate-600">{ev.detail}</p>
+                            ) : null}
+                            <p className="mt-1 text-xs text-slate-500">
+                              {new Date(ev.occurredAt).toLocaleString("bg-BG", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}
+                              {ev.actorName ? ` · ${ev.actorName}` : ""}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
 
                 {boss && fmOpenFor === p.id ? (
                   <div className="mt-4 border-t border-slate-100 pt-4">

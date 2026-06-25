@@ -212,6 +212,24 @@ CREATE TRIGGER payments_updated_at
   BEFORE UPDATE ON public.payments
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- ─── История на обекти (създаване, редакция, изтриване + преглед в UI) ─────
+CREATE TABLE public.project_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
+  project_id uuid REFERENCES public.projects (id) ON DELETE SET NULL,
+  project_name text NOT NULL,
+  actor_id uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
+  actor_name text,
+  kind text NOT NULL,
+  title text NOT NULL,
+  detail text,
+  amount_eur numeric(14, 2),
+  occurred_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX project_events_project_id_idx ON public.project_events (project_id);
+CREATE INDEX project_events_company_id_idx ON public.project_events (company_id);
+
 CREATE TABLE public.monthly_reports (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   year int NOT NULL,
@@ -237,6 +255,7 @@ ALTER TABLE public.material_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.worker_salary_payouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_reports ENABLE ROW LEVEL SECURITY;
 
 -- Временно: всеки автентикиран клиент през anon ключ вижда/пише всичко.
@@ -279,6 +298,9 @@ CREATE POLICY "authenticated_all_expenses" ON public.expenses
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE POLICY "authenticated_all_payments" ON public.payments
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "authenticated_all_project_events" ON public.project_events
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE POLICY "authenticated_all_monthly_reports" ON public.monthly_reports

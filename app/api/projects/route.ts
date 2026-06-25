@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import type { SessionPayload } from "@/lib/auth";
 import { resolveCompanyId } from "@/lib/company-scope";
 import { mapProject } from "@/lib/map-supabase";
+import { insertProjectEvent } from "@/lib/project-history";
 import { projectPublic } from "@/lib/projects";
 import { requireAuth, requireBoss } from "@/lib/rbac";
 import { createClient } from "@/utils/supabase/server";
@@ -197,7 +198,23 @@ export async function POST(req: Request) {
     return Response.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  return Response.json(mapProject(row as Parameters<typeof mapProject>[0]), {
-    status: 201,
+  const mapped = mapProject(row as Parameters<typeof mapProject>[0]);
+  const { data: actor } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", session!.sub)
+    .maybeSingle();
+
+  await insertProjectEvent(supabase, {
+    companyId: session!.companyId!,
+    projectId: mapped.id,
+    projectName: mapped.name,
+    actorId: session!.sub,
+    actorName: (actor?.name as string | null) ?? null,
+    kind: "CREATED",
+    title: "Обектът е създаден",
+    detail: `${mapped.location} · ${mapped.name}`,
   });
+
+  return Response.json(mapped, { status: 201 });
 }

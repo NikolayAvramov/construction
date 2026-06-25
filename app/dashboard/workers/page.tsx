@@ -5,7 +5,23 @@ import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
 import { formatEur } from "@/lib/format-currency";
-import { workerRoleBg, WORKER_ROLE_OPTIONS } from "@/lib/ui-labels";
+import {
+  badge,
+  btnDanger,
+  btnGhost,
+  btnPrimary,
+  btnPrimaryBlue,
+  btnSecondary,
+  emptyStateBox,
+  inputBaseSm,
+  labelText,
+  listCard,
+  panel,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ProjectMini = { id: string; name: string };
 type WorkerRow = {
@@ -22,14 +38,6 @@ type GroupRow = {
   workers?: WorkerRow[];
 };
 
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm";
-
-const btnSecondary =
-  "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50";
-const btnDanger =
-  "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100";
-
 export default function WorkersPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -43,7 +51,6 @@ export default function WorkersPage() {
 
   const [groupName, setGroupName] = useState("");
   const [wName, setWName] = useState("");
-  const [wRole, setWRole] = useState("WORKER");
   const [wGroupId, setWGroupId] = useState("");
   const [wNadnik, setWNadnik] = useState("");
 
@@ -51,11 +58,10 @@ export default function WorkersPage() {
   const [editGroupName, setEditGroupName] = useState("");
   const [editWorkerId, setEditWorkerId] = useState<string | null>(null);
   const [ewName, setEwName] = useState("");
-  const [ewRole, setEwRole] = useState("WORKER");
   const [ewGroupId, setEwGroupId] = useState("");
   const [ewNadnik, setEwNadnik] = useState("");
-  /** Разгънат екип — работниците се виждат само при клик върху реда на екипа */
-  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [sheetGroup, setSheetGroup] = useState(false);
+  const [sheetWorker, setSheetWorker] = useState(false);
 
   const reloadGroups = useCallback(async () => {
     if (!projectId) return;
@@ -86,14 +92,27 @@ export default function WorkersPage() {
     void reloadGroups();
   }, [user, projectId, reloadGroups]);
 
-  useEffect(() => {
-    setOpenGroupId(null);
-  }, [projectId]);
-
   const totalWorkers = useMemo(
     () => groups.reduce((n, g) => n + (g.workers?.length ?? 0), 0),
     [groups]
   );
+
+  const selectedProject = projects.find((p) => p.id === projectId);
+
+  function openAddWorker(groupId: string) {
+    setWGroupId(groupId);
+    setSheetWorker(true);
+  }
+
+  function workerInitial(name: string): string {
+    const t = name.trim();
+    if (!t) return "?";
+    const parts = t.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return t.slice(0, 2).toUpperCase();
+  }
 
   async function addGroup(e: React.FormEvent) {
     e.preventDefault();
@@ -107,6 +126,7 @@ export default function WorkersPage() {
         body: JSON.stringify({ name: groupName.trim(), projectId }),
       });
       setGroupName("");
+      setSheetGroup(false);
       setMsg("Групата е създадена.");
       await reloadGroups();
     } catch (e) {
@@ -137,13 +157,13 @@ export default function WorkersPage() {
         method: "POST",
         body: JSON.stringify({
           name: wName.trim(),
-          role: wRole,
           groupId: wGroupId,
           ...nadnikPayload,
         }),
       });
       setWName("");
       setWNadnik("");
+      setSheetWorker(false);
       setMsg("Работникът е добавен.");
       await reloadGroups();
     } catch (e) {
@@ -199,7 +219,6 @@ export default function WorkersPage() {
         method: "PATCH",
         body: JSON.stringify({
           name: ewName.trim(),
-          role: ewRole,
           groupId: ewGroupId || null,
           ...patchNadnik,
         }),
@@ -229,102 +248,129 @@ export default function WorkersPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">
-          Работници и групи
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Първо виждате само екипите по обект. Натиснете реда на екип, за да се
-          покажат работниците вътре. Всички записи могат да се редактират и
-          изтриват.
-        </p>
+    <div className="space-y-6 sm:space-y-8">
+      <PageHeader
+        title="Работници и екипи"
+        description="Изберете обект. Всеки екип показва работниците си веднага — добавяйте хора от бутона в картата на екипа или отгоре."
+      >
+        <AddButton
+          onClick={() => setSheetGroup(true)}
+          disabled={!projectId}
+          variant="secondary"
+        >
+          Екип
+        </AddButton>
+        <AddButton
+          onClick={() => setSheetWorker(true)}
+          disabled={!projectId || groups.length === 0}
+        >
+          Работник
+        </AddButton>
+      </PageHeader>
+
+      <div className={`${panel} space-y-4`}>
+        <label className="block">
+          <span className={labelText}>Обект</span>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className={inputBaseSm}
+          >
+            {projects.length === 0 ? (
+              <option value="">Няма обекти — добавете от „Обекти“</option>
+            ) : null}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {projectId ? (
+          <div className="flex flex-wrap gap-3 border-t border-[var(--border)] pt-4 text-sm">
+            <div className="min-w-[120px] flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Екипи
+              </p>
+              <p className="mt-0.5 text-lg font-semibold text-[var(--brand)]">
+                {groups.length}
+              </p>
+            </div>
+            <div className="min-w-[120px] flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Работници
+              </p>
+              <p className="mt-0.5 text-lg font-semibold text-[var(--brand)]">
+                {totalWorkers}
+              </p>
+            </div>
+            {selectedProject ? (
+              <div className="w-full text-xs text-slate-600 sm:w-auto sm:flex-1 sm:text-right">
+                Преглед за{" "}
+                <span className="font-medium text-slate-800">
+                  {selectedProject.name}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <label className="block">
-        <span className="text-xs font-semibold text-slate-700">Обект</span>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm shadow-sm"
-        >
-          {projects.length === 0 ? (
-            <option value="">Няма обекти — добавете от „Обекти“</option>
-          ) : null}
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FlashMessages success={msg} error={err} />
 
-      {msg ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      ) : null}
-      {err ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {err}
-        </p>
-      ) : null}
-
-      <form onSubmit={addGroup} className={panel}>
-        <h2 className="text-sm font-semibold text-slate-900">Нова група</h2>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="Име на група"
-            className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-            required
-            disabled={!projectId}
-          />
+      <FormSheet
+        open={sheetGroup}
+        onClose={() => setSheetGroup(false)}
+        title="Нов екип"
+        description="Екип в рамките на избрания обект (напр. бетон, довършителни)."
+      >
+        <form onSubmit={addGroup} className="space-y-4">
+          <label className="block">
+            <span className={labelText}>Име на екип</span>
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="напр. Бетонджии"
+              className={inputBaseSm}
+              required
+              disabled={!projectId}
+              autoFocus
+            />
+          </label>
           <button
             type="submit"
             disabled={pendingGroup || !projectId}
-            className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50"
+            className={btnPrimaryBlue}
           >
-            {pendingGroup ? "…" : "Добави група"}
+            {pendingGroup ? "Запис…" : "Създай екип"}
           </button>
-        </div>
-      </form>
+        </form>
+      </FormSheet>
 
-      <form onSubmit={addWorker} className={panel}>
-        <h2 className="text-sm font-semibold text-slate-900">Нов работник</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700">Име</span>
+      <FormSheet
+        open={sheetWorker}
+        onClose={() => setSheetWorker(false)}
+        title="Нов работник"
+        description="Работник в екипа. Прораб (бригадир) се добавя от раздел „Бригадири“."
+      >
+        <form onSubmit={addWorker} className="space-y-4">
+          <label className="block">
+            <span className={labelText}>Име</span>
             <input
               value={wName}
               onChange={(e) => setWName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              className={inputBaseSm}
               required
               disabled={!projectId || groups.length === 0}
+              autoFocus
             />
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-slate-700">Роля</span>
-            <select
-              value={wRole}
-              onChange={(e) => setWRole(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-              disabled={!projectId || groups.length === 0}
-            >
-              {WORKER_ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-700">Група</span>
+            <span className={labelText}>Екип</span>
             <select
               value={wGroupId}
               onChange={(e) => setWGroupId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              className={inputBaseSm}
               disabled={!projectId || groups.length === 0}
             >
               {groups.map((g) => (
@@ -334,10 +380,8 @@ export default function WorkersPage() {
               ))}
             </select>
           </label>
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700">
-              Надник (EUR / работен ден)
-            </span>
+          <label className="block">
+            <span className={labelText}>Надник (EUR / работен ден)</span>
             <input
               type="number"
               inputMode="decimal"
@@ -346,240 +390,289 @@ export default function WorkersPage() {
               value={wNadnik}
               onChange={(e) => setWNadnik(e.target.value)}
               placeholder="по избор"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              className={inputBaseSm}
               disabled={!projectId || groups.length === 0}
             />
           </label>
-        </div>
-        <button
-          type="submit"
-          disabled={pendingWorker || !projectId || groups.length === 0}
-          className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
-        >
-          {pendingWorker ? "Запис…" : "Добави работник"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={pendingWorker || !projectId || groups.length === 0}
+            className={btnPrimary}
+          >
+            {pendingWorker ? "Запис…" : "Добави работник"}
+          </button>
+        </form>
+      </FormSheet>
 
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-800">
-          Екипи по обекта
-          <span className="ml-2 font-normal text-slate-500">
-            ({groups.length} екипа · {totalWorkers}{" "}
-            {totalWorkers === 1 ? "човек" : "души"})
-          </span>
+      <section className="space-y-4" aria-labelledby="teams-heading">
+        <h2
+          id="teams-heading"
+          className="text-sm font-semibold text-slate-800"
+        >
+          Екипи на обекта
         </h2>
+
         {groups.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-            Няма групи за този обект.
-          </p>
+          <div className={emptyStateBox}>
+            <p className="text-sm font-medium text-slate-700">
+              Все още няма екипи за този обект
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Създайте първи екип (напр. „Бетон“, „Довършителни работи“), след
+              което добавете работници.
+            </p>
+            <button
+              type="button"
+              disabled={!projectId}
+              onClick={() => setSheetGroup(true)}
+              className={`${btnPrimaryBlue} mt-5 max-w-xs`}
+            >
+              Създай първи екип
+            </button>
+          </div>
         ) : (
-          groups.map((g) => {
-            const wCount = (g.workers ?? []).length;
-            const expanded = openGroupId === g.id;
-            return (
-              <div
-                key={g.id}
-                className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm"
-              >
-                {editGroupId === g.id ? (
-                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4">
-                    <input
-                      value={editGroupName}
-                      onChange={(e) => setEditGroupName(e.target.value)}
-                      className="min-w-[160px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                    />
-                    <button
-                      type="button"
-                      className={btnSecondary}
-                      onClick={() => void saveGroup(g.id)}
-                    >
-                      Запази
-                    </button>
-                    <button
-                      type="button"
-                      className={btnSecondary}
-                      onClick={() => setEditGroupId(null)}
-                    >
-                      Отказ
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-stretch gap-0">
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50"
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setOpenGroupId((id) => (id === g.id ? null : g.id))
-                      }
-                    >
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600"
-                        aria-hidden
-                      >
-                        {expanded ? "▼" : "▶"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block font-semibold text-slate-900">
-                          {g.name}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-slate-500">
-                          {wCount === 0
-                            ? "Няма работници"
-                            : wCount === 1
-                              ? "1 работник"
-                              : `${wCount} работници`}
-                          {expanded ? "" : " · натиснете за списък"}
-                        </span>
-                      </span>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-2 border-l border-slate-100 bg-slate-50/40 px-3">
-                      <button
-                        type="button"
-                        className={btnSecondary}
-                        onClick={() => {
-                          setEditGroupId(g.id);
-                          setEditGroupName(g.name);
-                          setOpenGroupId(g.id);
-                        }}
-                      >
-                        Редактирай
-                      </button>
-                      <button
-                        type="button"
-                        className={btnDanger}
-                        onClick={() => void deleteGroup(g.id)}
-                      >
-                        Изтрий група
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {expanded && editGroupId !== g.id ? (
-                  <ul className="space-y-2 border-t border-slate-100 bg-slate-50/30 px-4 py-3">
-                    {wCount === 0 ? (
-                      <li className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
-                        Няма хора в този екип.
-                      </li>
+          <ul className="space-y-4">
+            {groups.map((g) => {
+              const workers = g.workers ?? [];
+              const wCount = workers.length;
+              const editingGroup = editGroupId === g.id;
+
+              return (
+                <li
+                  key={g.id}
+                  className={`overflow-hidden ${listCard} !p-0 ring-1 ring-transparent`}
+                >
+                  <header className="border-b border-[var(--border)] bg-gradient-to-r from-slate-50/80 to-white px-4 py-4 sm:px-5">
+                    {editingGroup ? (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <label className="min-w-0 flex-1">
+                          <span className="sr-only">Име на екип</span>
+                          <input
+                            value={editGroupName}
+                            onChange={(e) => setEditGroupName(e.target.value)}
+                            className="w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-[var(--shadow-sm)]"
+                            autoFocus
+                          />
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className={btnPrimaryBlue}
+                            onClick={() => void saveGroup(g.id)}
+                          >
+                            Запази
+                          </button>
+                          <button
+                            type="button"
+                            className={btnSecondary}
+                            onClick={() => setEditGroupId(null)}
+                          >
+                            Отказ
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      (g.workers ?? []).map((w) => (
-                        <li
-                          key={w.id}
-                          className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm"
-                        >
-                          {editWorkerId === w.id ? (
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <input
-                                value={ewName}
-                                onChange={(e) => setEwName(e.target.value)}
-                                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm sm:col-span-2"
-                              />
-                              <select
-                                value={ewRole}
-                                onChange={(e) => setEwRole(e.target.value)}
-                                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                              >
-                                {WORKER_ROLE_OPTIONS.map((o) => (
-                                  <option key={o.value} value={o.value}>
-                                    {o.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                value={ewGroupId}
-                                onChange={(e) => setEwGroupId(e.target.value)}
-                                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                              >
-                                {groups.map((gr) => (
-                                  <option key={gr.id} value={gr.id}>
-                                    {gr.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <label className="sm:col-span-2">
-                                <span className="text-[10px] font-semibold text-slate-600">
-                                  Надник (EUR / ден)
-                                </span>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min={0}
-                                  step="0.01"
-                                  value={ewNadnik}
-                                  onChange={(e) => setEwNadnik(e.target.value)}
-                                  placeholder="празно = без ставка"
-                                  className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                                />
-                              </label>
-                              <div className="flex gap-2 sm:col-span-2">
-                                <button
-                                  type="button"
-                                  className={btnSecondary}
-                                  onClick={() => void saveWorker(w.id)}
-                                >
-                                  Запази
-                                </button>
-                                <button
-                                  type="button"
-                                  className={btnSecondary}
-                                  onClick={() => setEditWorkerId(null)}
-                                >
-                                  Отказ
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <p className="font-medium text-slate-900">
-                                  {w.name}
-                                </p>
-                                <p className="text-xs text-slate-600">
-                                  {workerRoleBg(w.role)}
-                                  {w.nadnik != null ? (
-                                    <span className="mt-0.5 block text-slate-500">
-                                      Надник: {formatEur(w.nadnik)}/ден
-                                    </span>
-                                  ) : null}
-                                </p>
-                              </div>
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  className={btnSecondary}
-                                  onClick={() => {
-                                    setEditWorkerId(w.id);
-                                    setEwName(w.name);
-                                    setEwRole(w.role);
-                                    setEwGroupId(w.groupId ?? g.id);
-                                    setEwNadnik(
-                                      w.nadnik != null ? String(w.nadnik) : ""
-                                    );
-                                    setOpenGroupId(g.id);
-                                  }}
-                                >
-                                  Редактирай
-                                </button>
-                                <button
-                                  type="button"
-                                  className={btnDanger}
-                                  onClick={() => void deleteWorker(w.id)}
-                                >
-                                  Изтрий
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </li>
-                      ))
+                      <>
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)]/10 text-sm font-bold text-[var(--brand)]"
+                            aria-hidden
+                          >
+                            {workerInitial(g.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+                              {g.name}
+                            </h3>
+                            <p className="mt-0.5 text-sm text-slate-600">
+                              {wCount === 0
+                                ? "Няма назначени работници"
+                                : wCount === 1
+                                  ? "1 работник в екипа"
+                                  : `${wCount} работника в екипа`}
+                            </p>
+                          </div>
+                          <span
+                            className={`${badge} shrink-0 bg-slate-100 text-slate-700`}
+                          >
+                            {wCount}
+                          </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)]/80 pt-3">
+                          <button
+                            type="button"
+                            className={`${btnPrimary} !w-auto !min-h-[40px] px-4 py-2 text-sm lg:!min-h-[36px]`}
+                            onClick={() => openAddWorker(g.id)}
+                          >
+                            + Работник в екипа
+                          </button>
+                          <button
+                            type="button"
+                            className={btnGhost}
+                            onClick={() => {
+                              setEditGroupId(g.id);
+                              setEditGroupName(g.name);
+                            }}
+                          >
+                            Преименувай екип
+                          </button>
+                          <button
+                            type="button"
+                            className={`${btnGhost} text-red-700 hover:bg-red-50 hover:text-red-800`}
+                            onClick={() => void deleteGroup(g.id)}
+                          >
+                            Изтрий екип
+                          </button>
+                        </div>
+                      </>
                     )}
-                  </ul>
-                ) : null}
-              </div>
-            );
-          })
+                  </header>
+
+                  {!editingGroup ? (
+                    <div className="px-4 py-2 sm:px-5">
+                      {wCount === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openAddWorker(g.id)}
+                          className="my-3 flex w-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-300/90 bg-slate-50/60 px-4 py-8 text-center transition hover:border-[var(--accent)]/40 hover:bg-[var(--accent-soft)]/30"
+                        >
+                          <span className="text-sm font-semibold text-[var(--brand)]">
+                            Добавете първия работник
+                          </span>
+                          <span className="mt-1 text-xs text-slate-500">
+                            Ще се запише директно в екип „{g.name}“
+                          </span>
+                        </button>
+                      ) : (
+                        <ul className="divide-y divide-[var(--border)]">
+                          {workers.map((w) => (
+                            <li key={w.id} className="py-1">
+                              {editWorkerId === w.id ? (
+                                <div className="my-3 rounded-xl border border-[var(--border)] bg-slate-50/80 p-4">
+                                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Редакция на работник
+                                  </p>
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <label className="sm:col-span-2">
+                                      <span className={labelText}>Име</span>
+                                      <input
+                                        value={ewName}
+                                        onChange={(e) =>
+                                          setEwName(e.target.value)
+                                        }
+                                        className={inputBaseSm}
+                                      />
+                                    </label>
+                                    <label className="sm:col-span-2">
+                                      <span className={labelText}>Екип</span>
+                                      <select
+                                        value={ewGroupId}
+                                        onChange={(e) =>
+                                          setEwGroupId(e.target.value)
+                                        }
+                                        className={inputBaseSm}
+                                      >
+                                        {groups.map((gr) => (
+                                          <option key={gr.id} value={gr.id}>
+                                            {gr.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="sm:col-span-2">
+                                      <span className={labelText}>
+                                        Надник (EUR / ден)
+                                      </span>
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min={0}
+                                        step="0.01"
+                                        value={ewNadnik}
+                                        onChange={(e) =>
+                                          setEwNadnik(e.target.value)
+                                        }
+                                        placeholder="празно = без ставка"
+                                        className={inputBaseSm}
+                                      />
+                                    </label>
+                                    <div className="flex gap-2 sm:col-span-2">
+                                      <button
+                                        type="button"
+                                        className={btnPrimary}
+                                        onClick={() => void saveWorker(w.id)}
+                                      >
+                                        Запази
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={btnSecondary}
+                                        onClick={() => setEditWorkerId(null)}
+                                      >
+                                        Отказ
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div
+                                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600"
+                                      aria-hidden
+                                    >
+                                      {workerInitial(w.name)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-medium text-slate-900">
+                                        {w.name}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {w.nadnik != null
+                                          ? `Надник ${formatEur(w.nadnik)} / ден`
+                                          : "Без зададен надник"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 gap-2">
+                                    <button
+                                      type="button"
+                                      className={btnGhost}
+                                      onClick={() => {
+                                        setEditWorkerId(w.id);
+                                        setEwName(w.name);
+                                        setEwGroupId(w.groupId ?? g.id);
+                                        setEwNadnik(
+                                          w.nadnik != null
+                                            ? String(w.nadnik)
+                                            : ""
+                                        );
+                                      }}
+                                    >
+                                      Редактирай
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`${btnGhost} text-red-700 hover:bg-red-50`}
+                                      onClick={() => void deleteWorker(w.id)}
+                                    >
+                                      Изтрий
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 }

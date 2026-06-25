@@ -18,14 +18,6 @@ export function projectStatusBg(code: string): string {
   return m[code] ?? code;
 }
 
-export function workerRoleBg(code: string): string {
-  const m: Record<string, string> = {
-    WORKER: "Работник",
-    FOREMAN: "Бригадир",
-  };
-  return m[code] ?? code;
-}
-
 /** Стойност + етикет за полета тип select */
 export const EXPENSE_CATEGORY_OPTIONS = [
   { value: "MATERIALS", label: "Материали" },
@@ -37,9 +29,4 @@ export const EXPENSE_CATEGORY_OPTIONS = [
 export const PROJECT_STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Активен" },
   { value: "COMPLETED", label: "Приключен" },
-] as const;
-
-export const WORKER_ROLE_OPTIONS = [
-  { value: "WORKER", label: "Работник" },
-  { value: "FOREMAN", label: "Бригадир (работник)" },
 ] as const;

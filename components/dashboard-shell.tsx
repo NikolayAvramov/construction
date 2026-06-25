@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import { BrandMark } from "@/components/ui/brand-mark";
+import { btnGhost, btnSecondary } from "@/lib/ui-classes";
 
 type NavItem = {
   href: string;
@@ -14,8 +16,11 @@ type NavItem = {
   icon: ReactNode;
 };
 
-const navLinkBase =
+const mobileNavLink =
   "flex min-h-[44px] min-w-[3rem] shrink-0 snap-start flex-col items-center justify-center gap-0 rounded-lg px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors active:scale-[0.98] sm:min-h-[46px] sm:min-w-[3.5rem] sm:gap-0.5 sm:px-2 sm:py-1 sm:text-[10px] sm:leading-tight";
+
+const desktopNavLink =
+  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors";
 
 async function loadMeWithRetry(): Promise<AuthUser> {
   let last: Error | null = null;
@@ -37,6 +42,57 @@ function isNavActive(pathname: string, match: string): boolean {
     return new RegExp(match).test(pathname);
   }
   return pathname.includes(match);
+}
+
+function NavLink({
+  item,
+  pathname,
+  variant,
+}: {
+  item: NavItem;
+  pathname: string;
+  variant: "mobile" | "desktop";
+}) {
+  const active = isNavActive(pathname, item.match);
+
+  if (variant === "desktop") {
+    return (
+      <Link
+        href={item.href}
+        aria-current={active ? "page" : undefined}
+        className={`${desktopNavLink} ${
+          active
+            ? "bg-[var(--accent-soft)] text-[var(--accent-hover)] shadow-[var(--shadow-sm)] ring-1 ring-orange-200/60"
+            : "text-slate-600 hover:bg-slate-50 hover:text-[var(--brand)]"
+        }`}
+      >
+        <span className={active ? "text-[var(--accent)]" : "text-slate-400"}>
+          {item.icon}
+        </span>
+        {item.label}
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      role="listitem"
+      aria-current={active ? "page" : undefined}
+      className={`${mobileNavLink} touch-manipulation ${
+        active
+          ? "bg-[var(--accent-soft)] text-[var(--accent-hover)] ring-1 ring-orange-200/50"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+      }`}
+    >
+      <span className={active ? "text-[var(--accent)]" : "text-slate-400"}>
+        {item.icon}
+      </span>
+      <span className="max-w-[3.25rem] text-center sm:max-w-[3.75rem]">
+        {item.label}
+      </span>
+    </Link>
+  );
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -102,6 +158,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const boss = user.role === "BOSS";
+  const roleLabel = boss ? "Управител" : "Бригадир";
+  const companyName = user.company?.name ?? "Фирма";
 
   const bossNav: NavItem[] = [
     {
@@ -146,6 +204,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       match: "reports",
       icon: <IconChart />,
     },
+    {
+      href: "/dashboard/foremen",
+      label: "Бригадири",
+      match: "foremen",
+      icon: <IconHardHat />,
+    },
   ];
 
   const foremanNav: NavItem[] = [
@@ -184,72 +248,121 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const nav = boss ? bossNav : foremanNav;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--background)] pb-[calc(3.85rem+env(safe-area-inset-bottom))] text-slate-900 sm:pb-[calc(4.1rem+env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/95 shadow-sm backdrop-blur-md">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4 sm:pb-3 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <div className="min-w-0 flex-1 pr-2">
-            <p className="truncate text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500 sm:text-[10px] sm:tracking-[0.12em]">
-              {boss
-                ? "Управител · " + (user.company?.name ?? "Фирма")
-                : "Бригадир"}
-            </p>
-            <p className="truncate text-sm font-semibold leading-tight text-slate-900">
-              {user.name}
-            </p>
-          </div>
+    <div className="app-canvas min-h-screen text-slate-900">
+      {/* Desktop sidebar */}
+      <aside
+        className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)] lg:flex xl:w-72"
+        aria-label="Странична навигация"
+      >
+        <div className="border-b border-[var(--border)] bg-gradient-to-b from-slate-50/80 to-transparent px-5 py-5">
+          <BrandMark size="md" />
+          <p className="mt-4 truncate rounded-lg bg-[var(--brand)]/5 px-2.5 py-2 text-xs font-semibold text-[var(--brand)]">
+            {companyName}
+          </p>
+          <p className="mt-1 px-2.5 text-[11px] font-medium text-slate-500">
+            {roleLabel}
+          </p>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          {nav.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              variant="desktop"
+            />
+          ))}
+        </nav>
+        <div className="border-t border-[var(--border)] bg-slate-50/50 p-4">
+          <p className="truncate text-sm font-bold text-[var(--brand)]">
+            {user.name}
+          </p>
+          <p className="truncate text-xs text-slate-500">{user.email}</p>
           <button
             type="button"
             onClick={() => logout()}
-            className="touch-manipulation shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:py-2"
+            className={`mt-3 w-full ${btnSecondary}`}
           >
             Изход
           </button>
         </div>
-      </header>
+      </aside>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-3 sm:px-4 sm:py-5">
-        {children}
-      </main>
+      <div className="flex min-h-screen flex-col lg:pl-64 xl:pl-72">
+        {/* Mobile header */}
+        <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/90 shadow-[var(--shadow-sm)] backdrop-blur-md lg:hidden">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4 sm:pb-3 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div className="min-w-0 flex-1 pr-2">
+              <p className="truncate text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500 sm:text-[10px]">
+                {roleLabel} · {companyName}
+              </p>
+              <p className="truncate text-sm font-semibold leading-tight text-slate-900">
+                {user.name}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Изход
+            </button>
+          </div>
+        </header>
 
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--border)] bg-[var(--surface)]/98 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md"
-        aria-label="Основна навигация"
-      >
-        <div
-          className="scrollbar-hide mx-auto flex max-w-3xl snap-x snap-mandatory gap-0.5 overflow-x-auto overflow-y-hidden px-1.5 pt-1 pb-[max(0.2rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch] sm:gap-1 sm:px-2 sm:pt-1.5 sm:pb-[max(0.35rem,env(safe-area-inset-bottom))]"
-          role="list"
+        {/* Desktop top bar */}
+        <header className="sticky top-0 z-10 hidden border-b border-[var(--border)] bg-[var(--surface)]/90 shadow-[var(--shadow-sm)] backdrop-blur-md lg:block">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-8 py-3.5 xl:px-10">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                {companyName}
+              </p>
+              <p className="text-base font-bold tracking-tight text-[var(--brand)]">
+                {user.name}
+                <span className="ml-2 text-sm font-medium text-slate-500">
+                  {roleLabel}
+                </span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className={btnGhost}
+            >
+              Изход
+            </button>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-3 pb-[calc(3.85rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-5 sm:pb-[calc(4.1rem+env(safe-area-inset-bottom))] lg:max-w-7xl lg:px-8 lg:pb-8 lg:pt-6 xl:px-10">
+          {children}
+        </main>
+
+        {/* Mobile bottom nav */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--border)] bg-[var(--surface)]/95 shadow-[var(--shadow-lg)] backdrop-blur-md lg:hidden"
+          aria-label="Основна навигация"
         >
-          {nav.map((item) => {
-            const active = isNavActive(pathname, item.match);
-            return (
-              <Link
+          <div
+            className="scrollbar-hide mx-auto flex max-w-3xl snap-x snap-mandatory gap-0.5 overflow-x-auto px-1.5 pt-1 pb-[max(0.2rem,env(safe-area-inset-bottom))] sm:gap-1 sm:px-2 sm:pt-1.5"
+            role="list"
+          >
+            {nav.map((item) => (
+              <NavLink
                 key={item.href}
-                href={item.href}
-                role="listitem"
-                aria-current={active ? "page" : undefined}
-                className={`${navLinkBase} touch-manipulation ${
-                  active
-                    ? "text-blue-700 ring-1 ring-blue-200/70 bg-blue-50/95"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <span className={active ? "text-blue-700" : "text-slate-500"}>
-                  {item.icon}
-                </span>
-                <span className="max-w-[3.25rem] text-center sm:max-w-[3.75rem] md:max-w-none">
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+                item={item}
+                pathname={pathname}
+                variant="mobile"
+              />
+            ))}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 }
 
-const ic =
-  "h-[1.125rem] w-[1.125rem] shrink-0 sm:h-5 sm:w-5";
+const ic = "h-[1.125rem] w-[1.125rem] shrink-0 sm:h-5 sm:w-5";
 
 function IconHome() {
   return (
@@ -319,6 +432,15 @@ function IconTruck() {
   return (
     <svg className={ic} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+    </svg>
+  );
+}
+
+function IconHardHat() {
+  return (
+    <svg className={ic} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3C7 5.5 4 8 4 11v1h16v-1c0-3-3-5.5-8-8z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 12v3a2 2 0 002 2h1m13-5v3a2 2 0 01-2 2h-1M8 17v3m8-3v3" />
     </svg>
   );
 }

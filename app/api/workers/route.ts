@@ -26,7 +26,6 @@ function mapWorkerRow(w: Record<string, unknown>) {
 
 const workerCreateSchema = z.object({
   name: z.string().min(1),
-  role: z.nativeEnum(WorkerRole).optional(),
   groupId: z.preprocess(
     (val) => (val === "" ? null : val),
     z.union([z.string().min(1), z.null()]).optional()
@@ -172,7 +171,7 @@ export async function POST(req: Request) {
 
   const insert: Record<string, unknown> = {
     name: d.name,
-    role: d.role ?? WorkerRole.WORKER,
+    role: WorkerRole.WORKER,
     group_id: d.groupId ?? null,
   };
   if (d.nadnik !== undefined) {

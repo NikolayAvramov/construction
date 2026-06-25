@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import {
+  btnPrimaryBlue,
+  inputBase,
+  labelText,
+  listCard,
+  panel,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ProjectMini = {
   id: string;
@@ -40,9 +51,6 @@ function normalizeMovement(raw: Record<string, unknown>): Movement {
   };
 }
 
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-5";
-
 export default function MaterialsPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [projects, setProjects] = useState<ProjectMini[]>([]);
@@ -56,6 +64,7 @@ export default function MaterialsPage() {
   const [inventoryItemId, setInventoryItemId] = useState("");
   const [moveQty, setMoveQty] = useState("");
   const [moveNote, setMoveNote] = useState("");
+  const [sheetMove, setSheetMove] = useState(false);
 
   const loadMovements = useCallback(async () => {
     if (!projectId) return;
@@ -140,6 +149,7 @@ export default function MaterialsPage() {
       setMsg("Материалът е отчетен към обекта и наличността в склада е намалена.");
       setMoveQty("");
       setMoveNote("");
+      setSheetMove(false);
       await loadItems();
       await loadMovements();
     } catch (err) {
@@ -162,17 +172,18 @@ export default function MaterialsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-          Материали към обект
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Отчислете количество от централния склад към избрания обект — наличността
-          в склада намалява автоматично (като в примера: 10 торби цимент, за обект
-          5, остават 5).
-        </p>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Материали към обект"
+        description="История на отчисленията по обект. Ново отчисляване — от бутона вдясно."
+      >
+        <AddButton
+          onClick={() => setSheetMove(true)}
+          disabled={items.length === 0 || !projectId}
+        >
+          Отчисли материал
+        </AddButton>
+      </PageHeader>
 
       {projects.length > 0 ? (
         <label className="block">
@@ -204,79 +215,63 @@ export default function MaterialsPage() {
               : "Помолете управителя да зареди склада с материали."}
           </p>
         </div>
-      ) : (
-        <form onSubmit={submitMove} className={panel}>
-          <h2 className="text-sm font-semibold text-slate-900">
-            Отчисли от склад към обекта
-          </h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Количеството се изважда от общата наличност на артикула във фирмения
-            склад.
-          </p>
-          <div className="mt-4 space-y-3">
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-700">
-                Материал (наличност)
-              </span>
-              <select
-                value={inventoryItemId}
-                onChange={(e) => setInventoryItemId(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-base shadow-sm"
-                disabled={!projectId}
-              >
-                {items.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} — {i.quantity} {i.unit} в склад
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-700">
-                Количество за обекта
-              </span>
-              <input
-                value={moveQty}
-                onChange={(e) => setMoveQty(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-3 text-base tabular-nums shadow-sm"
-                inputMode="decimal"
-                placeholder={`напр. 5 ${selectedItem?.unit ?? ""}`}
-                disabled={!projectId}
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold text-slate-700">
-                Бележка (по желание)
-              </span>
-              <input
-                value={moveNote}
-                onChange={(e) => setMoveNote(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm"
-                placeholder="напр. за първи етаж"
-                disabled={!projectId}
-              />
-            </label>
-          </div>
+      ) : null}
+
+      <FlashMessages success={msg} error={error} />
+
+      <FormSheet
+        open={sheetMove}
+        onClose={() => setSheetMove(false)}
+        title="Отчисли от склад"
+        description="Количеството се изважда от общата наличност във фирмения склад."
+      >
+        <form onSubmit={submitMove} className="space-y-3">
+          <label className="block">
+            <span className={labelText}>Материал (наличност)</span>
+            <select
+              value={inventoryItemId}
+              onChange={(e) => setInventoryItemId(e.target.value)}
+              className={inputBase}
+              disabled={!projectId}
+            >
+              {items.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} — {i.quantity} {i.unit} в склад
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelText}>Количество за обекта</span>
+            <input
+              value={moveQty}
+              onChange={(e) => setMoveQty(e.target.value)}
+              className={`${inputBase} tabular-nums`}
+              inputMode="decimal"
+              placeholder={`напр. 5 ${selectedItem?.unit ?? ""}`}
+              disabled={!projectId}
+              autoFocus
+            />
+          </label>
+          <label className="block">
+            <span className={labelText}>Бележка (по желание)</span>
+            <input
+              value={moveNote}
+              onChange={(e) => setMoveNote(e.target.value)}
+              className={inputBase}
+              placeholder="напр. за първи етаж"
+              disabled={!projectId}
+            />
+          </label>
           <button
             type="submit"
             disabled={pendingMove || !projectId}
-            className="mt-5 min-h-[48px] w-full rounded-lg bg-blue-700 py-3 text-base font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50 sm:text-sm"
+            className={btnPrimaryBlue}
           >
             {pendingMove ? "Запис…" : "Потвърди отчисляване"}
           </button>
         </form>
-      )}
-
-      {msg ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      </FormSheet>
 
       <div>
         <h2 className="text-sm font-semibold text-slate-800">
@@ -289,10 +284,7 @@ export default function MaterialsPage() {
         ) : (
           <ul className="mt-3 space-y-3">
             {rows.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-5"
-              >
+              <li key={r.id} className={listCard}>
                 <p className="font-semibold text-slate-900">
                   {r.item.name}{" "}
                   <span className="font-normal tabular-nums text-slate-700">

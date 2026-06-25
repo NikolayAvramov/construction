@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
 import { formatEur } from "@/lib/format-currency";
+import {
+  btnDanger,
+  btnPrimary,
+  btnSecondary,
+  inputBaseSm,
+  labelText,
+  listCard,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Item = {
   id: string;
@@ -13,13 +25,6 @@ type Item = {
   unit: string;
   unitCostEur: string | number | null;
 };
-
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm";
-const btnSecondary =
-  "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50";
-const btnDanger =
-  "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100";
 
 function parseOptionalEuro(raw: string): number | undefined {
   const t = raw.trim().replace(",", ".");
@@ -57,6 +62,7 @@ export default function InventoryPage() {
   const [eUnit, setEUnit] = useState("");
   const [eUnitCostEur, setEUnitCostEur] = useState("");
   const [ePurchaseTotalEur, setEPurchaseTotalEur] = useState("");
+  const [sheetAdd, setSheetAdd] = useState(false);
 
   useEffect(() => {
     apiJson<AuthUser>("/api/auth/me").then((u) => {
@@ -121,6 +127,7 @@ export default function InventoryPage() {
       setNewUnit("бр.");
       setNewUnitCostEur("");
       setNewPurchaseTotalEur("");
+      setSheetAdd(false);
       setMsg("Артикулът е добавен в склада.");
       await refresh();
     } catch (e) {
@@ -196,110 +203,96 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">
-          Склад
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Добавяйте и редактирайте материали и наличности.           Цените са в{" "}
-          <span className="font-semibold text-slate-800">евро (EUR)</span>
-          — цена за единица или общо платено за въведеното количество.
-        </p>
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+      <PageHeader
+        title="Склад"
+        description="Наличности и цени в евро (EUR). Добавяне на артикул — от бутона вдясно."
+      >
+        <AddButton onClick={() => setSheetAdd(true)}>Добави артикул</AddButton>
+      </PageHeader>
 
-      <form onSubmit={addItem} className={panel}>
-        <h2 className="text-sm font-semibold text-slate-900">Нов артикул</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <FlashMessages success={msg} error={error} />
+
+      <FormSheet
+        open={sheetAdd}
+        onClose={() => setSheetAdd(false)}
+        title="Нов артикул"
+        description="Цена за единица или общо платено за въведеното количество."
+      >
+        <form onSubmit={addItem} className="grid gap-3 sm:grid-cols-2">
           <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700">
-              Наименование
-            </span>
+            <span className={labelText}>Наименование</span>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              className={inputBaseSm}
               required
+              autoFocus
             />
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-slate-700">
-              Количество
-            </span>
+            <span className={labelText}>Количество</span>
             <input
               value={newQty}
               onChange={(e) => setNewQty(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm tabular-nums"
+              className={`${inputBaseSm} tabular-nums`}
               required
               inputMode="decimal"
             />
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-slate-700">
-              Мерна единица
-            </span>
+            <span className={labelText}>Мерна единица</span>
             <input
               value={newUnit}
               onChange={(e) => setNewUnit(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+              className={inputBaseSm}
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700">
-              Цена за 1 единица (EUR)
-            </span>
+            <span className={labelText}>Цена за 1 единица (EUR)</span>
             <input
               value={newUnitCostEur}
               onChange={(e) => setNewUnitCostEur(e.target.value)}
               placeholder="напр. 12,50"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm tabular-nums"
+              className={`${inputBaseSm} tabular-nums`}
               inputMode="decimal"
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700">
+            <span className={labelText}>
               Или общо платено за това количество (EUR)
             </span>
             <input
               value={newPurchaseTotalEur}
               onChange={(e) => setNewPurchaseTotalEur(e.target.value)}
               placeholder="напр. закупихте 1000 кг за 240 €"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm tabular-nums"
+              className={`${inputBaseSm} tabular-nums`}
               inputMode="decimal"
             />
             <span className="mt-1 block text-[11px] text-slate-500">
               Ако попълните и двете, ползва се цената за единица.
             </span>
           </label>
-        </div>
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
-        >
-          {pending ? "Запис…" : "Добави в склад"}
-        </button>
-      </form>
-
-      {msg ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+          <button
+            type="submit"
+            disabled={pending}
+            className={`sm:col-span-2 ${btnPrimary}`}
+          >
+            {pending ? "Запис…" : "Добави в склад"}
+          </button>
+        </form>
+      </FormSheet>
 
       <ul className="space-y-3">
+        {items.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+            Складът е празен. Натиснете „Добави артикул“.
+          </li>
+        ) : null}
         {items.map((i) => {
           const line = lineStockEur(i.quantity, i.unitCostEur);
           return (
-            <li
-              key={i.id}
-              className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm"
-            >
+            <li key={i.id} className={listCard}>
               {editId === i.id ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { UserRole } from "@/lib/enums";
 import { getSessionFromRequest } from "@/lib/auth";
 import { createSignupClient } from "@/lib/supabase-signup";
+import { loadForemanProjectMap, setForemanProjects } from "@/lib/foreman-projects";
 import { requireBoss } from "@/lib/rbac";
 import { createClient } from "@/utils/supabase/server";
 
@@ -23,13 +24,28 @@ export async function GET(req: Request) {
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
-  return Response.json(rows ?? []);
+
+  const list = rows ?? [];
+  const projectMap = await loadForemanProjectMap(
+    supabase,
+    list.map((r) => r.id as string)
+  );
+
+  return Response.json(
+    list.map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      projects: projectMap[r.id as string] ?? [],
+    }))
+  );
 }
 
 const schema = z.object({
   email: z.string().email(),
   password: z.string().min(6, "Password must be at least 6 characters"),
   name: z.string().min(1),
+  projectIds: z.array(z.string().uuid()).optional(),
 });
 
 export async function POST(req: Request) {
@@ -94,8 +110,42 @@ export async function POST(req: Request) {
     return Response.json({ error: perr.message }, { status: 500 });
   }
 
+  const projectIds = parsed.data.projectIds ?? [];
+  if (projectIds.length > 0) {
+    const assign = await setForemanProjects(
+      supabase,
+      me.company_id,
+      authData.user.id,
+      projectIds
+    );
+    if (assign.error) {
+      return Response.json(
+        {
+          error: `Бригадирът е създаден, но обектите не са назначени: ${assign.error}`,
+          user: {
+            id: authData.user.id,
+            email,
+            name,
+            role: UserRole.FOREMAN,
+          },
+        },
+        { status: 201 }
+      );
+    }
+  }
+
+  const projectMap = await loadForemanProjectMap(supabase, [authData.user.id]);
+
   return Response.json(
-    { user: { id: authData.user.id, email, name, role: UserRole.FOREMAN } },
+    {
+      user: {
+        id: authData.user.id,
+        email,
+        name,
+        role: UserRole.FOREMAN,
+        projects: projectMap[authData.user.id] ?? [],
+      },
+    },
     { status: 201 }
   );
 }

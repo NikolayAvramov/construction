@@ -4,6 +4,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
+import {
+  btnPrimary,
+  btnPrimaryBlue,
+  inputBase,
+  labelText,
+  listCard,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 
 type BossProfile = {
   id: string;
@@ -33,9 +44,6 @@ function formatWhen(iso: string | null | undefined): string {
   }
 }
 
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm";
-
 export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -48,6 +56,10 @@ export default function AdminPage() {
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
   const [editingCo, setEditingCo] = useState<string | null>(null);
   const [coNameDraft, setCoNameDraft] = useState("");
+  const [sheetCompany, setSheetCompany] = useState(false);
+  const [bossSheetCompanyId, setBossSheetCompanyId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     apiJson<AuthUser>("/api/auth/me")
@@ -74,6 +86,7 @@ export default function AdminPage() {
         body: JSON.stringify({ name }),
       });
       setName("");
+      setSheetCompany(false);
       const list = await apiJson<CompanyRow[]>("/api/companies");
       setCompanies(list);
       setMsgKind("ok");
@@ -131,6 +144,7 @@ export default function AdminPage() {
         ...prev,
         [companyId]: { email: "", password: "", name: "" },
       }));
+      setBossSheetCompanyId(null);
       setMsgKind("ok");
       setMsg(
         "Управителят е създаден. Може да влезе с посочения имейл и парола."
@@ -159,65 +173,136 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Фирми
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-            Създайте нова фирма и добавете управител. Управителят води обекти,
-            склад и финанси за съответната организация.
-          </p>
-        </div>
+      <PageHeader
+        title="Фирми"
+        description="Преглед на организациите. Нова фирма и управител — от бутоните, не в списъка."
+      >
         <button
           type="button"
           onClick={() => logout()}
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
           Изход
         </button>
-      </div>
+        <AddButton onClick={() => setSheetCompany(true)}>Нова фирма</AddButton>
+      </PageHeader>
 
-      <form onSubmit={createCompany} className={panel}>
-        <h2 className="text-sm font-semibold text-slate-900">
-          Нова фирма
-        </h2>
-        <label className="mt-4 block">
-          <span className="text-xs font-semibold text-slate-700">
-            Наименование
-          </span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-3 text-base shadow-sm"
-            required
-            placeholder="напр. Строй ООД"
-          />
-        </label>
-        <button
-          type="submit"
-          className="mt-5 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-        >
-          Добави фирма
-        </button>
-      </form>
+      <FlashMessages
+        success={msgKind === "ok" ? msg : null}
+        error={msgKind === "err" ? msg : null}
+      />
 
-      {msg ? (
-        <p
-          className={
-            msgKind === "ok"
-              ? "rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900"
-              : "rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-900"
+      <FormSheet
+        open={sheetCompany}
+        onClose={() => setSheetCompany(false)}
+        title="Нова фирма"
+        description="След това добавете управител към фирмата."
+      >
+        <form onSubmit={createCompany} className="space-y-4">
+          <label className="block">
+            <span className={labelText}>Наименование</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={inputBase}
+              required
+              placeholder="напр. Строй ООД"
+              autoFocus
+            />
+          </label>
+          <button type="submit" className={btnPrimary}>
+            Добави фирма
+          </button>
+        </form>
+      </FormSheet>
+
+      {bossSheetCompanyId ? (
+        <FormSheet
+          open={!!bossSheetCompanyId}
+          onClose={() => setBossSheetCompanyId(null)}
+          title="Нов управител"
+          description={
+            companies.find((c) => c.id === bossSheetCompanyId)?.name ??
+            "Фирма"
           }
-          role="status"
         >
-          {msg}
-        </p>
+          <div className="space-y-3">
+            <input
+              placeholder="Име и фамилия"
+              value={bossForms[bossSheetCompanyId]?.name ?? ""}
+              onChange={(e) =>
+                setBossForms((prev) => ({
+                  ...prev,
+                  [bossSheetCompanyId]: {
+                    ...(prev[bossSheetCompanyId] ?? {
+                      email: "",
+                      password: "",
+                      name: "",
+                    }),
+                    name: e.target.value,
+                  },
+                }))
+              }
+              className={inputBase}
+              autoFocus
+            />
+            <input
+              type="email"
+              placeholder="Имейл за вход"
+              value={bossForms[bossSheetCompanyId]?.email ?? ""}
+              onChange={(e) =>
+                setBossForms((prev) => ({
+                  ...prev,
+                  [bossSheetCompanyId]: {
+                    ...(prev[bossSheetCompanyId] ?? {
+                      email: "",
+                      password: "",
+                      name: "",
+                    }),
+                    email: e.target.value,
+                  },
+                }))
+              }
+              className={inputBase}
+            />
+            <input
+              type="password"
+              placeholder="Парола (мин. 6 знака)"
+              value={bossForms[bossSheetCompanyId]?.password ?? ""}
+              onChange={(e) =>
+                setBossForms((prev) => ({
+                  ...prev,
+                  [bossSheetCompanyId]: {
+                    ...(prev[bossSheetCompanyId] ?? {
+                      email: "",
+                      password: "",
+                      name: "",
+                    }),
+                    password: e.target.value,
+                  },
+                }))
+              }
+              className={inputBase}
+            />
+            <button
+              type="button"
+              onClick={() => createBoss(bossSheetCompanyId)}
+              className={btnPrimaryBlue}
+            >
+              Създай управител
+            </button>
+          </div>
+        </FormSheet>
       ) : null}
 
       <ul className="space-y-6">
+        {companies.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+            Няма фирми. Натиснете „Нова фирма“.
+          </li>
+        ) : null}
         {companies.map((c) => (
-          <li key={c.id} className={panel}>
+          <li key={c.id} className={listCard}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               {editingCo === c.id ? (
                 <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
@@ -311,60 +396,13 @@ export default function AdminPage() {
               )}
             </div>
 
-            <div className="mt-6 space-y-3 border-t border-slate-100 pt-6">
-              <p className="text-sm font-semibold text-slate-800">
-                Нов управител за тази фирма
-              </p>
-              <input
-                placeholder="Име и фамилия"
-                value={bossForms[c.id]?.name ?? ""}
-                onChange={(e) =>
-                  setBossForms((prev) => ({
-                    ...prev,
-                    [c.id]: {
-                      ...(prev[c.id] ?? { email: "", password: "", name: "" }),
-                      name: e.target.value,
-                    },
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-              />
-              <input
-                type="email"
-                placeholder="Имейл за вход"
-                value={bossForms[c.id]?.email ?? ""}
-                onChange={(e) =>
-                  setBossForms((prev) => ({
-                    ...prev,
-                    [c.id]: {
-                      ...(prev[c.id] ?? { email: "", password: "", name: "" }),
-                      email: e.target.value,
-                    },
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-              />
-              <input
-                type="password"
-                placeholder="Парола"
-                value={bossForms[c.id]?.password ?? ""}
-                onChange={(e) =>
-                  setBossForms((prev) => ({
-                    ...prev,
-                    [c.id]: {
-                      ...(prev[c.id] ?? { email: "", password: "", name: "" }),
-                      password: e.target.value,
-                    },
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-              />
+            <div className="mt-6 border-t border-slate-100 pt-6">
               <button
                 type="button"
-                onClick={() => createBoss(c.id)}
-                className="w-full rounded-lg bg-blue-700 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+                onClick={() => setBossSheetCompanyId(c.id)}
+                className="w-full rounded-lg border border-blue-200 bg-blue-50 py-2.5 text-sm font-semibold text-blue-900 shadow-sm hover:bg-blue-100"
               >
-                Създай управител
+                + Добави управител
               </button>
             </div>
           </li>

@@ -6,6 +6,19 @@ import type { AuthUser } from "@/lib/types";
 import { apiJson } from "@/lib/client-api";
 import { formatEur } from "@/lib/format-currency";
 import { expenseCategoryBg, EXPENSE_CATEGORY_OPTIONS } from "@/lib/ui-labels";
+import {
+  btnDanger,
+  btnPrimary,
+  btnSecondary,
+  inputBaseSm,
+  labelText,
+  listCard,
+  panel,
+} from "@/lib/ui-classes";
+import { AddButton } from "@/components/ui/add-button";
+import { FlashMessages } from "@/components/ui/flash-messages";
+import { FormSheet } from "@/components/ui/form-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ProjectMini = { id: string; name: string };
 type ExpenseRow = {
@@ -25,13 +38,6 @@ type PaymentRow = {
   projectId: string;
   project?: { id: string; name: string };
 };
-
-const panel =
-  "rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm";
-const btnSecondary =
-  "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50";
-const btnDanger =
-  "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100";
 
 type Tab = "expenses" | "payments";
 
@@ -110,6 +116,8 @@ export default function ExpensesPage() {
   const [salaryItems, setSalaryItems] = useState<PendingSalaryItem[]>([]);
   const [salaryLoading, setSalaryLoading] = useState(false);
   const [salaryPayingId, setSalaryPayingId] = useState<string | null>(null);
+  const [sheetExpense, setSheetExpense] = useState(false);
+  const [sheetPayment, setSheetPayment] = useState(false);
 
   const loadPendingSalaries = useCallback(async () => {
     if (!user || user.role !== "BOSS") return;
@@ -210,6 +218,7 @@ export default function ExpensesPage() {
       });
       setAmount("");
       setDescription("");
+      setSheetExpense(false);
       setMsg("Разходът е записан.");
       await refreshExp();
     } catch (e) {
@@ -242,6 +251,7 @@ export default function ExpensesPage() {
       });
       setPayAmount("");
       setPayDesc("");
+      setSheetPayment(false);
       setMsg("Плащането е записано.");
       await refreshPay();
     } catch (e) {
@@ -332,17 +342,29 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold tracking-tight text-slate-900">
-        Финанси
-      </h1>
-      <div className="flex gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
+      <PageHeader
+        title="Финанси"
+        description="Разходи, постъпили плащания и заплати. Добавяне — от бутона според избрания таб."
+      >
+        {tab === "expenses" ? (
+          <AddButton onClick={() => setSheetExpense(true)}>Нов разход</AddButton>
+        ) : (
+          <AddButton
+            onClick={() => setSheetPayment(true)}
+            disabled={projects.length === 0}
+          >
+            Ново плащане
+          </AddButton>
+        )}
+      </PageHeader>
+      <div className="inline-flex w-full max-w-md gap-1 rounded-xl border border-[var(--border)] bg-slate-100/80 p-1 shadow-[var(--shadow-sm)] sm:w-auto">
         <button
           type="button"
           onClick={() => setTab("expenses")}
-          className={`flex-1 rounded-md py-2 text-sm font-semibold ${
+          className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
             tab === "expenses"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600"
+              ? "bg-[var(--surface)] text-[var(--brand)] shadow-[var(--shadow-sm)]"
+              : "text-slate-600 hover:text-slate-900"
           }`}
         >
           Разходи
@@ -350,26 +372,157 @@ export default function ExpensesPage() {
         <button
           type="button"
           onClick={() => setTab("payments")}
-          className={`flex-1 rounded-md py-2 text-sm font-semibold ${
+          className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${
             tab === "payments"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600"
+              ? "bg-[var(--surface)] text-[var(--brand)] shadow-[var(--shadow-sm)]"
+              : "text-slate-600 hover:text-slate-900"
           }`}
         >
           Плащания
         </button>
       </div>
 
-      {msg ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      ) : null}
-      {err ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {err}
-        </p>
-      ) : null}
+      <FlashMessages success={msg} error={err} />
+
+      <FormSheet
+        open={sheetExpense}
+        onClose={() => setSheetExpense(false)}
+        title="Нов разход"
+        description="Фирмен или към конкретен обект."
+      >
+        <form onSubmit={addExpense} className="grid gap-3 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className={labelText}>
+              Обект <span className="font-normal text-slate-500">(по избор)</span>
+            </span>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className={inputBaseSm}
+            >
+              <option value="">
+                — Без обект (фирмен: гориво, осигуровки и др.) —
+              </option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelText}>Сума (EUR)</span>
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={`${inputBaseSm} tabular-nums`}
+              required
+              inputMode="decimal"
+              autoFocus
+            />
+          </label>
+          <label className="block">
+            <span className={labelText}>Дата</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputBaseSm}
+              required
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className={labelText}>Категория</span>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={inputBaseSm}
+            >
+              {EXPENSE_CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block sm:col-span-2">
+            <span className={labelText}>Описание</span>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className={inputBaseSm}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={pending}
+            className={`sm:col-span-2 ${btnPrimary}`}
+          >
+            {pending ? "Запис…" : "Добави разход"}
+          </button>
+        </form>
+      </FormSheet>
+
+      <FormSheet
+        open={sheetPayment}
+        onClose={() => setSheetPayment(false)}
+        title="Ново плащане"
+        description="Постъпило плащане от клиент към обект."
+      >
+        <form onSubmit={addPayment} className="grid gap-3 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className={labelText}>Обект</span>
+            <select
+              value={payProjectId}
+              onChange={(e) => setPayProjectId(e.target.value)}
+              className={inputBaseSm}
+              required
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelText}>Сума (EUR)</span>
+            <input
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
+              className={`${inputBaseSm} tabular-nums`}
+              required
+              inputMode="decimal"
+              autoFocus
+            />
+          </label>
+          <label className="block">
+            <span className={labelText}>Дата</span>
+            <input
+              type="date"
+              value={payDate}
+              onChange={(e) => setPayDate(e.target.value)}
+              className={inputBaseSm}
+              required
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className={labelText}>Описание</span>
+            <input
+              value={payDesc}
+              onChange={(e) => setPayDesc(e.target.value)}
+              className={inputBaseSm}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={pending || projects.length === 0}
+            className={`sm:col-span-2 ${btnPrimary}`}
+          >
+            {pending ? "Запис…" : "Добави плащане"}
+          </button>
+        </form>
+      </FormSheet>
 
       {tab === "expenses" ? (
         <>
@@ -476,91 +629,15 @@ export default function ExpensesPage() {
             )}
           </section>
 
-          <form onSubmit={addExpense} className={panel}>
-            <h2 className="text-sm font-semibold text-slate-900">Нов разход</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Обект <span className="font-normal text-slate-500">(по избор)</span>
-                </span>
-                <select
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                >
-                  <option value="">
-                    — Без обект (фирмен: гориво, осигуровки и др.) —
-                  </option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-700">
-                  Сума (EUR)
-                </span>
-                <input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm tabular-nums"
-                  required
-                  inputMode="decimal"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-700">Дата</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                  required
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Категория
-                </span>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                >
-                  {EXPENSE_CATEGORY_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Описание
-                </span>
-                <input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                />
-              </label>
-            </div>
-            <button
-              type="submit"
-              disabled={pending}
-              className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
-            >
-              {pending ? "Запис…" : "Добави разход"}
-            </button>
-          </form>
+          <h2 className="text-sm font-semibold text-slate-800">Записани разходи</h2>
           <ul className="space-y-3">
+            {expRows.length === 0 ? (
+              <li className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                Няма разходи. Натиснете „Нов разход“.
+              </li>
+            ) : null}
             {expRows.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm"
-              >
+              <li key={r.id} className={listCard}>
                 {editExpId === r.id ? (
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input
@@ -676,73 +753,17 @@ export default function ExpensesPage() {
         </>
       ) : (
         <>
-          <form onSubmit={addPayment} className={panel}>
-            <h2 className="text-sm font-semibold text-slate-900">Ново плащане</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Обект
-                </span>
-                <select
-                  value={payProjectId}
-                  onChange={(e) => setPayProjectId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                  required
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-700">
-                  Сума (EUR)
-                </span>
-                <input
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm tabular-nums"
-                  required
-                  inputMode="decimal"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-700">Дата</span>
-                <input
-                  type="date"
-                  value={payDate}
-                  onChange={(e) => setPayDate(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                  required
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Описание
-                </span>
-                <input
-                  value={payDesc}
-                  onChange={(e) => setPayDesc(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                />
-              </label>
-            </div>
-            <button
-              type="submit"
-              disabled={pending || projects.length === 0}
-              className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
-            >
-              {pending ? "Запис…" : "Добави плащане"}
-            </button>
-          </form>
+          <h2 className="text-sm font-semibold text-slate-800">
+            Постъпили плащания
+          </h2>
           <ul className="space-y-3">
+            {payRows.length === 0 ? (
+              <li className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                Няма плащания. Натиснете „Ново плащане“.
+              </li>
+            ) : null}
             {payRows.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm"
-              >
+              <li key={r.id} className={listCard}>
                 {editPayId === r.id ? (
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input

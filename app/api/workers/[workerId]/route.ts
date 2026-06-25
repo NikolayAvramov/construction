@@ -8,7 +8,6 @@ export const dynamic = "force-dynamic";
 
 const workerUpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  role: z.nativeEnum(WorkerRole).optional(),
   groupId: z.preprocess(
     (val) => (val === "" ? null : val),
     z.union([z.string().min(1), z.null()]).optional()
@@ -133,7 +132,6 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const patch: Record<string, unknown> = {};
   if (d.name !== undefined) patch.name = d.name;
-  if (d.role !== undefined) patch.role = d.role;
   if (d.groupId !== undefined) patch.group_id = d.groupId;
   if (d.nadnik !== undefined) patch.nadnik = d.nadnik;
 
